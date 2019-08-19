@@ -1,10 +1,7 @@
-# Copyright 2018, Georgia Tech Research Corporation    
-# Atlanta, Georgia 30332-0415     
-# All Rights Reserved  
+# ML4T 2019 Fall 
 
-# ML4T_2019 Fall 
-Course website: http://quantsoftware.gatech.edu/CS7646_Fall_2019
-
-Information on using the autograder on buffet0x servers: http://quantsoftware.gatech.edu/ML4T_Software_Setup
+### Resources
+* Course website: http://quantsoftware.gatech.edu/CS7646_Fall_2019
+* Info on buffet0x autograder servers: http://quantsoftware.gatech.edu/ML4T_Software_Setup
 
 
