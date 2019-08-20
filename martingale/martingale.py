@@ -27,6 +27,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.misc import comb
 
+
 def author():
     return 'cfleisher3'  # replace tb34 with your Georgia Tech username.
 
@@ -49,7 +50,7 @@ def run_simulator(win_prob, bank_roll=None):
 
     avail_roll = bank_roll
     if avail_roll is not None:
-        avail_roll = abs(avail_roll)
+        avail_roll = a1000bs(avail_roll)
 
     while True:
         # break after 1,000 spins
@@ -110,8 +111,17 @@ def experiment1(win_prob):
     plt.ylabel('winnings ($)')
 
     # subplot 2 (mean +/- 1 std)
-    data2 = np.array([run_simulator(win_prob) for _ in range(1000)])
+    cnt = 1000
+    data2 = np.array([run_simulator(win_prob) for _ in range(cnt)])
     winnings2 = data2[:, :, 0]
+
+    # calc prob winnings >= $80
+    final_wins = winnings2[:, -1]
+    win_80 = np.sum(np.where(final_wins >= 80., True, False))
+    pmsg = f'final winnings >= $80: {win_80}' \
+           f'\nP(X>=0)={win_80/final_wins.shape[0]:0.2f}'
+    print(pmsg)
+
     mean_data = np.mean(winnings2, axis=0)
     std_data = np.std(winnings2, axis=0)
     chart2_data = np.array([
@@ -204,7 +214,6 @@ def peak_drawdown(bets):
 def calc_prob(max_bets, net_wins):
     p = 18/38
     q = 1 - p
-    max_loss = max_bets-net_wins+1
     probs = np.zeros(max_bets-net_wins+1)
     probs[0] = p**net_wins
     for i in range(1, probs.shape[0]):
@@ -213,7 +222,6 @@ def calc_prob(max_bets, net_wins):
         prior_total = net_wins+i
         prior_wins = net_wins + (i-1)//2
         prior_losses = prior_total - prior_wins
-        # print(f'prior total: {prior_total}, prior wins: {prior_wins}, prior_losses: {prior_losses}')
 
         prior_combo = comb(prior_total, prior_wins)
         prior_exp_prob = (p**prior_wins)*(q**prior_losses)
@@ -223,25 +231,11 @@ def calc_prob(max_bets, net_wins):
             cur_prob *= p
 
         probs[i] = prior_probs*prior_combo*prior_exp_prob*cur_prob
-
-        # prior_probs = 1 - np.sum(probs[:i])
-        # prior_bets = 2*(i-1)+net_wins
-        # prior_wins = net_wins-1
-        # prior_combo = comb(prior_bets, prior_wins)
-
-        # cur_wins = prior_wins+2
-        # cur_losses = prior_bets+2-cur_wins
-        # cur_prob = (p**(cur_wins))*q**(cur_losses)
-        # # print(f'prior_probs: {prior_probs}; prior_combo: {prior_combo}; cur_prob: {cur_prob}')
-        # probs[i] = prior_probs*prior_combo*cur_prob
-        # print(f'prior_probs:{prior_probs}; prior_combo:{prior_combo}; cur_prob:{cur_prob}')
-        # print(f'prior bets: {prior_bets}, prior wins: {prior_wins}, cur_wins: {cur_wins}, cur_losses: {cur_losses}')
-        # print(f'i 0: {probs[i]}')
     return probs
 
 
 def experiment1_prob(win_prob, max_bets, net_win):
-    # P(X>=80)= 1 - P(X<80)
+    # P(X>=80) = 1 - P(X<80)
     loss_prob = 1 - win_prob
     total = 1.0
     for wins in range(80):
@@ -250,31 +244,19 @@ def experiment1_prob(win_prob, max_bets, net_win):
     return total
 
 
-def experiment1_exp_val(win_prob, n):
-    loss_prob = 1.0 - win_prob
-    ev = 0.0
-    for i in range(n+1):
-        ev += win_prob - loss_prob
-
-    return ev
-
-
 def test_code():
     win_prob = 18 / 38  # american roulette: 18 black, 18 red, 2 green
     np.random.seed(gtid())  # do this only once
 
     # end_purse, start loss_count, win or loss, wager
-    # experiment1(win_prob)
+    experiment1(win_prob)
     # experiment2(win_prob)
     # plt.show()
 
     max_bets = 1000
     net_wins = 80
     result = experiment1_prob(win_prob, max_bets, net_wins)
-    print(f'sum: {result}')
-
-    ev = experiment1_exp_val(win_prob, 1000)
-    print(f'ev: {ev}')
+    print(f'exp1 prob: {result}')
 
 
 if __name__ == "__main__":
