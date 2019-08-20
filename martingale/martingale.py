@@ -115,8 +115,9 @@ def experiment1(win_prob):
     data2 = np.array([run_simulator(win_prob) for _ in range(cnt)])
     winnings2 = data2[:, :, 0]
 
-    # calc prob winnings >= $80
+    # prob calcs
     actual_wins_gt_80(winnings2, label='Experiment 1:')
+    exp_val(winnings2, label='Experiment 1:')
 
     # mean std vals
     mean_data = np.mean(winnings2, axis=0)
@@ -156,24 +157,15 @@ def experiment1(win_prob):
     plt.legend()
 
 
-def actual_wins_gt_80(winnings, label=''):
-    # calc prob winnings >= $80
-    final_wins = winnings[:, -1]
-    win_80 = np.sum(np.where(final_wins >= 80., True, False))
-    pmsg = f'{label}' \
-           f'\nfinal winnings>=$80:{win_80}' \
-           f'\nP(X>=0)={win_80/final_wins.shape[0]:0.2f}'
-    print(pmsg)
-
-
 def experiment2(win_prob):
     # subplot 4: 1000 simulations with mean +/- 1 std
     sims = range(1000)
     data = np.array([run_simulator(win_prob, bank_roll=256) for _ in sims])
     winnings = data[:, :, 0]
 
-    # prob wins gt 80
+    # prob calcs
     actual_wins_gt_80(winnings, label='Experiment 2:')
+    exp_val(winnings, label='Experiment 2:')
 
     # mean, std stats
     mean_data = np.mean(winnings, axis=0)
@@ -212,39 +204,6 @@ def experiment2(win_prob):
     plt.legend()
 
 
-def peak_drawdown(bets):
-    drawdown = 0
-    print(f'bet\tloss\tdrawdown')
-    for i in range(1, bets):
-        loss = 2**(i-1)
-        drawdown -= loss
-        print(f'{i}\t{loss}\t{drawdown}')
-    return drawdown
-
-
-def calc_prob(max_bets, net_wins):
-    p = 18/38
-    q = 1 - p
-    probs = np.zeros(max_bets-net_wins+1)
-    probs[0] = p**net_wins
-    for i in range(1, probs.shape[0]):
-        prior_probs = 1 - np.sum(probs[:i])
-
-        prior_total = net_wins+i
-        prior_wins = net_wins + (i-1)//2
-        prior_losses = prior_total - prior_wins
-
-        prior_combo = comb(prior_total, prior_wins)
-        prior_exp_prob = (p**prior_wins)*(q**prior_losses)
-
-        cur_prob = p
-        if prior_total % 2 == 0:
-            cur_prob *= p
-
-        probs[i] = prior_probs*prior_combo*prior_exp_prob*cur_prob
-    return probs
-
-
 def experiment1_prob(win_prob, max_bets, net_win):
     # P(X>=80) = 1 - P(X<80)
     loss_prob = 1 - win_prob
@@ -253,6 +212,25 @@ def experiment1_prob(win_prob, max_bets, net_win):
         losses = max_bets - wins
         total -= comb(max_bets, wins)*(win_prob**wins)*loss_prob**losses
     return total
+
+
+def actual_wins_gt_80(winnings, label=''):
+    # calc prob winnings >= $80
+    final_wins = winnings[:, -1]
+    win_80 = np.sum(np.where(final_wins >= 80., True, False))
+    pmsg = f'{label}' \
+           f'\nfinal winnings>=$80:{win_80}' \
+           f'\nP(X>=0)={win_80/final_wins.shape[0]:0.2f}'
+    print(pmsg)
+
+
+def exp_val(winnings, label=''):
+    # E[X]
+    final_wins = winnings[:, -1]
+    ev = np.sum(final_wins) / final_wins.shape[0]
+    pmsg = f'{label}' \
+           f'\nE[X]={ev:0.2}'
+    print(pmsg)
 
 
 def test_code():
