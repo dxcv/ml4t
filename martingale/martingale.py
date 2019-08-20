@@ -96,21 +96,23 @@ def run_simulator(win_prob, bank_roll=None):
     return spins
 
 
-def experiment1(win_prob):
-    # subplot 1: 10 simulations
+def experiment1(win_prob, should_save=False):
+    # fig 1: 10 simulations
     data1 = np.array([run_simulator(win_prob) for _ in range(10)])
     winnings1 = data1[:, :, 0]
 
-    plt.subplot(511)
-    for row in winnings1:
-        plt.plot(row)
+    if should_save:
+        for row in winnings1:
+            plt.plot(row)
 
-    plt.title('Experiment 1')
-    plt.axis([0, 300, -256, 100])
-    plt.xlabel('simulation step')
-    plt.ylabel('winnings ($)')
+        plt.title('Figure 1 - 10 Simulations')
+        plt.axis([0, 300, -256, 100])
+        plt.xlabel('Simulation Step')
+        plt.ylabel('Winnings ($)')
+        plt.savefig('fig1.png')
+        plt.clf()
 
-    # subplot 2 (mean +/- 1 std)
+    # fig 2: mean +/- 1 std
     cnt = 1000
     data2 = np.array([run_simulator(win_prob) for _ in range(cnt)])
     winnings2 = data2[:, :, 0]
@@ -129,16 +131,19 @@ def experiment1(win_prob):
         ])
     chart2_labels = ['mean+1 std', 'mean', 'mean-1 std']
 
-    plt.subplot(512)
-    for i, row in enumerate(chart2_data):
-        plt.plot(row, label=chart2_labels[i])
+    if should_save:
+        for i, row in enumerate(chart2_data):
+            plt.plot(row, label=chart2_labels[i])
 
-    plt.axis([0, 300, -256, 100])
-    plt.xlabel('simulation step')
-    plt.ylabel('winnings ($)')
-    plt.legend()
+        plt.title('Figure 2 - 1,000 Simulations (mean +/- 1 STD)')
+        plt.axis([0, 300, -256, 100])
+        plt.xlabel('Simulation Step')
+        plt.ylabel('Winnings ($)')
+        plt.legend()
+        plt.savefig('fig2.png')
+        plt.clf()
 
-    # subplot 3 (median +/- 1 std)
+    # fig 3: median +/- 1 std
     median_data = np.median(winnings2, axis=0)
     chart3_data = np.array([
         median_data + std_data,
@@ -147,25 +152,24 @@ def experiment1(win_prob):
         ])
     chart3_labels = ['median+1 std', 'median', 'median-1 std']
 
-    plt.subplot(513)
-    for i, row in enumerate(chart3_data):
-        plt.plot(row, label=chart3_labels[i])
+    if should_save:
+        for i, row in enumerate(chart3_data):
+            plt.plot(row, label=chart3_labels[i])
 
-    plt.axis([0, 300, -256, 100])
-    plt.xlabel('simulation step')
-    plt.ylabel('winnings ($)')
-    plt.legend()
+        plt.title('Figure 3 - 1,000 Simulations (median +/- 1 STD)')
+        plt.axis([0, 300, -256, 100])
+        plt.xlabel('Simulation Step')
+        plt.ylabel('Winnings ($)')
+        plt.legend()
+        plt.savefig('fig3.png')
+        plt.clf()
 
 
-def experiment2(win_prob):
-    # subplot 4: 1000 simulations with mean +/- 1 std
+def experiment2(win_prob, should_save=False):
+    # fig 4: 1000 simulations with mean +/- 1 std
     sims = range(1000)
     data = np.array([run_simulator(win_prob, bank_roll=256) for _ in sims])
     winnings = data[:, :, 0]
-
-    # prob calcs
-    actual_wins_gt_80(winnings, label='Experiment 2:')
-    exp_val(winnings, label='Experiment 2:')
 
     # mean, std stats
     mean_data = np.mean(winnings, axis=0)
@@ -177,14 +181,17 @@ def experiment2(win_prob):
         ])
     chart4_labels = ['mean+1 std', 'mean', 'mean-1 std']
 
-    plt.subplot(514)
-    for i, row in enumerate(chart4_data):
-        plt.plot(row, label=chart4_labels[i])
+    if should_save:
+        for i, row in enumerate(chart4_data):
+            plt.plot(row, label=chart4_labels[i])
 
-    plt.axis([0, 300, -256, 100])
-    plt.xlabel('simulation step')
-    plt.ylabel('winnings ($)')
-    plt.legend()
+        plt.title('Figure 4 - 1,000 Simulations Bank Roll (mean +/- 1 STD)')
+        plt.axis([0, 300, -256, 100])
+        plt.xlabel('Simulation Step')
+        plt.ylabel('Winnings ($)')
+        plt.legend()
+        plt.savefig('fig4.png')
+        plt.clf()
 
     median_data = np.median(winnings, axis=0)
     chart5_data = np.array([
@@ -194,14 +201,17 @@ def experiment2(win_prob):
         ])
     chart5_labels = ['median+1 std', 'median', 'median-1 std']
 
-    plt.subplot(515)
-    for i, row in enumerate(chart5_data):
-        plt.plot(row, label=chart5_labels[i])
+    if should_save:
+        for i, row in enumerate(chart5_data):
+            plt.plot(row, label=chart5_labels[i])
 
-    plt.axis([0, 300, -256, 100])
-    plt.xlabel('simulation step')
-    plt.ylabel('winnings ($)')
-    plt.legend()
+        plt.title('Figure 5 - 1,000 Simulations Bank Roll (median +/- 1 STD)')
+        plt.axis([0, 300, -256, 100])
+        plt.xlabel('Simulation Step')
+        plt.ylabel('Winnings ($)')
+        plt.legend()
+        plt.savefig('fig5.png')
+        plt.clf()
 
 
 def experiment1_prob(win_prob, max_bets, net_win):
@@ -237,15 +247,9 @@ def test_code():
     win_prob = 18 / 38  # american roulette: 18 black, 18 red, 2 green
     np.random.seed(gtid())  # do this only once
 
-    # end_purse, start loss_count, win or loss, wager
-    experiment1(win_prob)
-    experiment2(win_prob)
-    # plt.show()
-
-    max_bets = 1000
-    net_wins = 80
-    result = experiment1_prob(win_prob, max_bets, net_wins)
-    print(f'exp1 prob: {result}')
+    # implementation
+    experiment1(win_prob, should_save=True)
+    experiment2(win_prob, should_save=True)
 
 
 if __name__ == "__main__":
