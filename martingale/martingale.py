@@ -50,7 +50,7 @@ def run_simulator(win_prob, bank_roll=None):
 
     avail_roll = bank_roll
     if avail_roll is not None:
-        avail_roll = a1000bs(avail_roll)
+        avail_roll = abs(avail_roll)
 
     while True:
         # break after 1,000 spins
@@ -116,12 +116,9 @@ def experiment1(win_prob):
     winnings2 = data2[:, :, 0]
 
     # calc prob winnings >= $80
-    final_wins = winnings2[:, -1]
-    win_80 = np.sum(np.where(final_wins >= 80., True, False))
-    pmsg = f'final winnings >= $80: {win_80}' \
-           f'\nP(X>=0)={win_80/final_wins.shape[0]:0.2f}'
-    print(pmsg)
+    actual_wins_gt_80(winnings2, label='Experiment 1:')
 
+    # mean std vals
     mean_data = np.mean(winnings2, axis=0)
     std_data = np.std(winnings2, axis=0)
     chart2_data = np.array([
@@ -159,12 +156,26 @@ def experiment1(win_prob):
     plt.legend()
 
 
+def actual_wins_gt_80(winnings, label=''):
+    # calc prob winnings >= $80
+    final_wins = winnings[:, -1]
+    win_80 = np.sum(np.where(final_wins >= 80., True, False))
+    pmsg = f'{label}' \
+           f'\nfinal winnings>=$80:{win_80}' \
+           f'\nP(X>=0)={win_80/final_wins.shape[0]:0.2f}'
+    print(pmsg)
+
+
 def experiment2(win_prob):
     # subplot 4: 1000 simulations with mean +/- 1 std
     sims = range(1000)
     data = np.array([run_simulator(win_prob, bank_roll=256) for _ in sims])
     winnings = data[:, :, 0]
 
+    # prob wins gt 80
+    actual_wins_gt_80(winnings, label='Experiment 2:')
+
+    # mean, std stats
     mean_data = np.mean(winnings, axis=0)
     std_data = np.std(winnings, axis=0)
     chart4_data = np.array([
@@ -250,7 +261,7 @@ def test_code():
 
     # end_purse, start loss_count, win or loss, wager
     experiment1(win_prob)
-    # experiment2(win_prob)
+    experiment2(win_prob)
     # plt.show()
 
     max_bets = 1000
