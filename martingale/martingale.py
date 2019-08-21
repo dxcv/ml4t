@@ -102,13 +102,13 @@ def experiment1(win_prob, should_save=False):
     winnings1 = data1[:, :, 0]
 
     if should_save:
-        for row in winnings1:
-            plt.plot(row)
+        for i, row in enumerate(winnings1):
+            plt.plot(row, label=f'sim {i+1}')
 
-        plt.title('Figure 1 - 10 Simulations')
         plt.axis([0, 300, -256, 100])
         plt.xlabel('Simulation Step')
         plt.ylabel('Winnings ($)')
+        plt.legend()
         plt.savefig('fig1.png')
         plt.clf()
 
@@ -135,7 +135,6 @@ def experiment1(win_prob, should_save=False):
         for i, row in enumerate(chart2_data):
             plt.plot(row, label=chart2_labels[i])
 
-        plt.title('Figure 2 - 1,000 Simulations (mean +/- 1 STD)')
         plt.axis([0, 300, -256, 100])
         plt.xlabel('Simulation Step')
         plt.ylabel('Winnings ($)')
@@ -156,7 +155,6 @@ def experiment1(win_prob, should_save=False):
         for i, row in enumerate(chart3_data):
             plt.plot(row, label=chart3_labels[i])
 
-        plt.title('Figure 3 - 1,000 Simulations (median +/- 1 STD)')
         plt.axis([0, 300, -256, 100])
         plt.xlabel('Simulation Step')
         plt.ylabel('Winnings ($)')
@@ -170,6 +168,12 @@ def experiment2(win_prob, should_save=False):
     sims = range(1000)
     data = np.array([run_simulator(win_prob, bank_roll=256) for _ in sims])
     winnings = data[:, :, 0]
+
+    # prob calcs
+    print(f'max winnings: {np.amax(winnings[:, -1])}')
+    print(f'min winnings: {np.amin(winnings[:, -1])}')
+    actual_wins_gt_80(winnings, label='Experiment 2:')
+    exp_val(winnings, label='Experiment 2:')
 
     # mean, std stats
     mean_data = np.mean(winnings, axis=0)
@@ -185,7 +189,6 @@ def experiment2(win_prob, should_save=False):
         for i, row in enumerate(chart4_data):
             plt.plot(row, label=chart4_labels[i])
 
-        plt.title('Figure 4 - 1,000 Simulations Bank Roll (mean +/- 1 STD)')
         plt.axis([0, 300, -256, 100])
         plt.xlabel('Simulation Step')
         plt.ylabel('Winnings ($)')
@@ -205,7 +208,6 @@ def experiment2(win_prob, should_save=False):
         for i, row in enumerate(chart5_data):
             plt.plot(row, label=chart5_labels[i])
 
-        plt.title('Figure 5 - 1,000 Simulations Bank Roll (median +/- 1 STD)')
         plt.axis([0, 300, -256, 100])
         plt.xlabel('Simulation Step')
         plt.ylabel('Winnings ($)')
