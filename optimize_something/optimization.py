@@ -52,15 +52,20 @@ def optimize_portfolio(sd=dt.datetime(2008, 1, 1), ed=dt.datetime(2009, 1, 1),
 
     # Compare daily portfolio value with SPY using a normalized plot
     if gen_plot:
-        # Get daily portfolio value
+        # indexed daily portfolio values
         port_val = pd.DataFrame(np.matmul(prices.values, allocs))
+        port_val = port_val / port_val.iloc[0]
         port_val = port_val.set_index(prices.index)
 
-        # add code to plot here
+        # indexed daily SPY values
+        idx_SPY = prices_SPY / prices_SPY.iloc[0]
+
+        # plot indexed portfolio vs SPY
         plt.plot(port_val, label='Portfolio')
-        plt.plot(prices_SPY, label='SPY')
-        plt.xlabel('Hold Period')
-        plt.ylabel('EOD Market Value ($)')
+        plt.plot(idx_SPY, label='SPY')
+        plt.title('Daily Portfolio Value and SPY')
+        plt.xlabel('Date')
+        plt.ylabel('Price')
 
         plt.legend()
         plt.savefig('fig1.png')
