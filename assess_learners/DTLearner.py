@@ -20,7 +20,7 @@ class DTLearner(object):
         """
         Training step for decision tree learner
         """
-        data = np.concatenate((dataX, dataY), axis=1)
+        data = np.concatenate((dataX, dataY[:, None]), axis=1)
         self._root = self._build_tree(data)
 
     def _build_tree(self, data):
@@ -39,17 +39,17 @@ class DTLearner(object):
             return [None, data[0][-1], None, None, data.shape[0]]
 
         # get best feature to split on
-        f_idx = self._best_feat(data)
-        f_med = np.median(data[:, f_idx])
+        idx = self._best_feat(data)
+        med = np.median(data[:, idx])
 
         # build subtrees
-        ldata = data[data[:, f_idx] <= f_med]
-        rdata = data[data[:, f_idx] > f_med]
+        ldata = data[data[:, idx] <= med]
+        rdata = data[data[:, idx] > med]
 
         ltree = self._build_tree(ldata)
         rtree = self._build_tree(rdata)
 
-        return [f_idx, f_med, ltree, rtree, data.shape[0]]
+        return [idx, med, ltree, rtree, data.shape[0]]
 
     def _best_feat(self, data):
         """
@@ -63,7 +63,7 @@ class DTLearner(object):
         Estimate set of test points with previously build decision tree.
         Returns 1d array of estimated values.
         """
-        results = np.zeros((points.shape[0],))
+        Y = np.zeros((points.shape[0],))
         for i in range(points.shape[0]):
             pt = points[i]
             node = self._root
@@ -72,12 +72,13 @@ class DTLearner(object):
                 if node[0] is None:
                     break
 
-                feat_idx = node[0]
+                # update node based on split val
+                idx = node[0]
                 split_val = node[1]
-                if pt[feat_idx] <= split_val:
+                if pt[idx] <= split_val:
                     node = node[2]
                 else:
                     node = node[3]
 
-            results[i] = node[1]
-        return results
+            Y[i] = node[1]
+        return Y

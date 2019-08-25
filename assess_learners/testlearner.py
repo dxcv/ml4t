@@ -16,25 +16,39 @@ students of CS 7646 is prohibited and subject to being investigated as a
 GT honor code violation.
 -----do not edit anything above this line---
 """
-import numpy as np
 import math
-import LinRegLearner as lrl
 import sys
+import numpy as np
+import LinRegLearner as lrl
+from DTLearner import DTLearner
+
+
+def eval_sample(lrner, X, Y, title='', verbose=True):
+    predY = lrner.query(X)
+    rmse = math.sqrt(((Y - predY)**2).sum() / Y.shape[0])
+    c = np.corrcoef(predY, y=Y)
+    if verbose:
+        print(f'\n{title}')
+        print(f'rmse: {rmse}')
+        print(f'corr: {c[0, 1]}')
+    return rmse, c
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python testlearner.py <filename>")
         sys.exit(1)
+
+    # read in data of given filename
     inf = open(sys.argv[1])
-    data = [list(map(float, s.strip().split(','))) for s in inf.readlines()]
-    data = np.array(data)
+    data = [list(s.strip().split(',')) for s in inf.readlines()[1:]]
+    data = np.array([list(map(float, vals[1:])) for vals in data])
 
     # compute how much of the data is training and testing
     train_rows = int(0.6 * data.shape[0])
     test_rows = data.shape[0] - train_rows
 
-    # separate out training and testing data
+    # split data into training and testing data
     trainX = data[:train_rows, 0:-1]
     trainY = data[:train_rows, -1]
     testX = data[train_rows:, 0:-1]
@@ -42,25 +56,22 @@ if __name__ == "__main__":
     print(f"{testX.shape}")
     print(f"{testY.shape}")
 
-    # create a learner and train it
-    learner = lrl.LinRegLearner(verbose=True)  # create a LinRegLearner
-    learner.addEvidence(trainX, trainY)  # train it
-    print(learner.author())
+    # create linreg learner and train it
+    print(f'\n**** LinRegLearner ****')
+    lrlearn = lrl.LinRegLearner(verbose=True)  # create a LinRegLearner
+    lrlearn.addEvidence(trainX, trainY)  # train it
+    print(lrlearn.author())
 
-    # evaluate in sample
-    predY = learner.query(trainX)  # get the predictions
-    rmse = math.sqrt(((trainY - predY) ** 2).sum()/trainY.shape[0])
-    print()
-    print("In sample results")
-    print(f"RMSE: {rmse}")
-    c = np.corrcoef(predY, y=trainY)
-    print(f"corr: {c[0,1]}")
+    # evaluate learner
+    eval_sample(lrlearn, trainX, trainY, title='in-sample results:')
+    eval_sample(lrlearn, testX, testY, title='out-of-sample results:')
 
-    # evaluate out of sample
-    predY = learner.query(testX)  # get the predictions
-    rmse = math.sqrt(((testY - predY) ** 2).sum()/testY.shape[0])
-    print()
-    print("Out of sample results")
-    print(f"RMSE: {rmse}")
-    c = np.corrcoef(predY, y=testY)
-    print(f"corr: {c[0,1]}")
+    # create dt learner and train it
+    print(f'\n**** DTLearner ****')
+    dtl = DTLearner(leaf_size=4)
+    dtl.addEvidence(trainX, trainY)
+    print(f'author: {dtl.author()}')
+
+    # evaluate
+    eval_sample(dtl, trainX, trainY, title='in-sample results')
+    eval_sample(dtl, testX, testY, title='out-of-sample results:')
