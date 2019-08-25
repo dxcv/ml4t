@@ -29,7 +29,7 @@ class LinRegLearner(object):
         pass  # move along, these aren't the drones you're looking for
 
     def author(self):
-        return 'tb34'  # replace tb34 with your Georgia Tech username
+        return 'cfleisher3'
 
     def addEvidence(self, dataX, dataY):
         """
@@ -40,6 +40,7 @@ class LinRegLearner(object):
         # slap on 1s column so linear regression finds a constant term
         newdataX = np.ones([dataX.shape[0], dataX.shape[1]+1])
         newdataX[:, 0:dataX.shape[1]] = dataX
+
         # build and save the model
         self.model_coefs, residuals, rank, s = np.linalg.lstsq(newdataX,
                                                                dataY,
