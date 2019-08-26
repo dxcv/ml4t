@@ -1,4 +1,5 @@
 data
+!assess_learners/data
 __pycache__
 *.swp
 .ipynb_checkpoints

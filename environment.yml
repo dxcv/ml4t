@@ -20,4 +20,4 @@ dependencies:
         - pip
         - pip:
                 - pprofile==2.0.2
-                - jsons=0.8.8
+                - jsons==0.8.8

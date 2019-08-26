@@ -42,9 +42,14 @@ class DTLearner(object):
         idx = self._best_feat(data)
         med = np.median(data[:, idx])
 
-        # build subtrees
         ldata = data[data[:, idx] <= med]
         rdata = data[data[:, idx] > med]
+
+        if ldata.shape[0] == 0:
+            return [None, np.mean(rdata[:, -1]), None, None, rdata.shape[0]]
+
+        if rdata.shape[0] == 0:
+            return [None, np.mean(ldata[:, -1]), None, None, ldata.shape[0]]
 
         ltree = self._build_tree(ldata)
         rtree = self._build_tree(rdata)

@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
     # create dt learner and train it
     print(f'\n**** DTLearner ****')
-    dtl = DTLearner(leaf_size=4)
+    dtl = DTLearner(leaf_size=50)
     dtl.addEvidence(trainX, trainY)
     print(f'author: {dtl.author()}')
 
