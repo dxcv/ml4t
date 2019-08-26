@@ -17,6 +17,7 @@ dependencies:
         - future=0.17.1
         - jupyter
         - jupyterlab
+        - flake8=3.7.7
         - pip
         - pip:
                 - pprofile==2.0.2
