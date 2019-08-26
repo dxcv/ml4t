@@ -39,7 +39,7 @@ class DTLearner(object):
             return [None, data[0][-1], None, None, data.shape[0]]
 
         # get best feature to split on
-        idx = self._best_feat(data)
+        idx = self._get_feat(data)
         med = np.median(data[:, idx])
 
         ldata = data[data[:, idx] <= med]
@@ -56,7 +56,7 @@ class DTLearner(object):
 
         return [idx, med, ltree, rtree, data.shape[0]]
 
-    def _best_feat(self, data):
+    def _get_feat(self, data):
         """
         Returns idx of feat with highest abs val corr to Y.
         """
