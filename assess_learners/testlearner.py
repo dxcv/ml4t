@@ -22,6 +22,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import LinRegLearner as lrl
 from DTLearner import DTLearner
+from RTLearner import RTLearner
 from BagLearner import BagLearner
 
 
@@ -72,6 +73,92 @@ def test_leaf_size(trainX, trainY, testX, testY, should_plot=False,
     return rmses
 
 
+def compare_dt_rt(trainX, trainY, testX, testY, should_plot=False,
+                  max_size=None, data_title=''):
+    bound = trainX.shape[0] // 5
+    if max_size is not None:
+        bound = min(max_size, bound)
+
+    resids = np.zeros((2, testX.shape[0]))
+    rsqrs = np.zeros((2, bound))
+    aics = np.zeros((2, bound))
+    stds = np.zeros((2, bound))
+    xrng = np.arange(bound)
+    n, k = trainX.shape
+    for i in xrng:
+        opts = {'leaf_size': i}
+        learners = [BagLearner(learner=DTLearner, kwargs=opts, bags=10),
+                    BagLearner(learner=RTLearner, kwargs=opts, bags=10)]
+        for j, learner in enumerate(learners):
+            learner.addEvidence(trainX, trainY)
+            predY = learner.query(testX)
+            if i == 0:
+                resids[j] = (testY - predY)
+            rsqrs[j][i] = np.corrcoef(predY, y=testY)[0, 1]**2
+            aics[j][i] = 2*k + n*np.log(((testY - predY)**2).sum()/n)
+            stds[j][i] = np.std(testY-predY)
+
+    if should_plot:
+        # plot R squared, AIC, std vs leaf size
+        if data_title != '':
+            data_title = f'_{data_title}'
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        x = xrng + 1
+        ax.plot(x, rsqrs[0], label='DTLearner')
+        ax.plot(x, rsqrs[1], label='RTLearner')
+
+        ax.set_xlabel('Leaf Size', fontweight='bold')
+        ax.set_ylabel('R-Squared', fontweight='bold')
+        ax.set_xbound(lower=1)
+
+        plt.legend()
+        plt.savefig(f'dtl_rtl_rsqr{data_title}.png')
+        plt.clf()
+
+        ax = fig.add_subplot(111)
+        ax.plot(x, aics[0], label='DTLearner')
+        ax.plot(x, aics[1], label='RTLearner')
+
+        ax.set_xlabel('Leaf Size', fontweight='bold')
+        ax.set_ylabel('AIC', fontweight='bold')
+        ax.set_xbound(lower=1)
+
+        plt.legend()
+        plt.savefig(f'dtl_rtl_aic{data_title}.png')
+        plt.clf()
+
+        ax = fig.add_subplot(111)
+        ax.plot(x, stds[0], label='DTLearner')
+        ax.plot(x, stds[1], label='RTLearner')
+
+        ax.set_xlabel('Leaf Size', fontweight='bold')
+        ax.set_ylabel('STD', fontweight='bold')
+        ax.set_xbound(lower=1)
+
+        plt.legend()
+        plt.savefig(f'dtl_rtl_std{data_title}.png')
+        plt.clf()
+
+        ax = fig.add_subplot(111)
+        ax.plot(range(trainX.shape[0]), trainY, 'bo')
+
+        ax.set_ylabel('Y', fontweight='bold')
+
+        plt.savefig(f'y_vals{data_title}.png')
+        plt.clf()
+
+        ax = fig.add_subplot(111)
+        ax.plot(testY, resids[0], 'bo')
+
+        ax.set_ylabel('Residuals', fontweight='bold')
+        ax.set_xlabel('Y', fontweight='bold')
+
+        plt.savefig(f'resids{data_title}.png')
+        plt.clf()
+
+
 def test_bagging(trainX, trainY, testX, testY, should_plot=False,
                  max_size=None):
     bound = trainX.shape[0] // 5
@@ -115,6 +202,22 @@ def test_bagging(trainX, trainY, testX, testY, should_plot=False,
         plt.clf()
 
 
+def split_data(data, verbose=False):
+    # compute how much data in training and testing
+    train_rows = int(0.6*data.shape[0])
+
+    # split data into training and testing
+    trainX = data[:train_rows, 0:-1]
+    trainY = data[:train_rows, -1]
+    testX = data[train_rows:, 0:-1]
+    testY = data[train_rows:, -1]
+    if verbose:
+        print(f"{testX.shape}")
+        print(f"{testY.shape}")
+
+    return trainX, trainY, testX, testY
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python testlearner.py <filename>")
@@ -125,17 +228,12 @@ if __name__ == "__main__":
     data = [list(s.strip().split(',')) for s in inf.readlines()[1:]]
     data = np.array([list(map(float, vals[1:])) for vals in data])
 
-    # compute how much of the data is training and testing
-    train_rows = int(0.6 * data.shape[0])
-    test_rows = data.shape[0] - train_rows
+    trainX, trainY, testX, testY = split_data(data, verbose=True)
 
-    # split data into training and testing data
-    trainX = data[:train_rows, 0:-1]
-    trainY = data[:train_rows, -1]
-    testX = data[train_rows:, 0:-1]
-    testY = data[train_rows:, -1]
-    print(f"{testX.shape}")
-    print(f"{testY.shape}")
+    # print correlation matrix
+    c = np.corrcoef(data, rowvar=False)
+    print(f'correlation matrix: Istanbul')
+    print(c)
 
     # create linreg learner and train it
     print(f'\n**** LinRegLearner ****')
@@ -162,5 +260,23 @@ if __name__ == "__main__":
                    should_plot=True)
 
     # bagging impact on DTLearner
-    test_bagging(trainX, trainY, testX, testY, max_size=100,
-                 should_plot=True)
+    # test_bagging(trainX, trainY, testX, testY, max_size=100,
+    #              should_plot=True)
+
+    # cmp dtl and rtl
+    compare_dt_rt(trainX, trainY, testX, testY, max_size=100,
+                  should_plot=True, data_title='ist')
+
+    # cmp dtl and rtl for winequality-red dataset
+    wqinf = open('Data/winequality-red.csv')
+    data = [list(s.strip().split(',')) for s in wqinf.readlines()]
+    data = np.array([list(map(float, vals)) for vals in data])
+
+    # print correlation matrix
+    c = np.corrcoef(data, rowvar=False)
+    print(f'correlation matrix: Wine Quality Red')
+    print(c)
+
+    trainX, trainY, testX, testY = split_data(data, verbose=True)
+    compare_dt_rt(trainX, trainY, testX, testY, max_size=100,
+                  should_plot=True, data_title='weq')
