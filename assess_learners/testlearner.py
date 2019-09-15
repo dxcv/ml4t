@@ -218,6 +218,22 @@ def split_data(data, verbose=False):
     return trainX, trainY, testX, testY
 
 
+def check_edge_cases():
+    # evaluate each data file with dtlearne
+    data_files = ['3_groups', 'ripple', 'simple',
+                  'winequality-red', 'winequality-white']
+    for name in data_files:
+        wqinf = open('Data/' + name + '.csv')
+        file_data = [list(s.strip().split(',')) for s in wqinf.readlines()]
+        file_data = np.array([list(map(float, vals)) for vals in file_data])
+
+        rtrainX, rtrainY, rtestX, rtestY = split_data(file_data, verbose=True)
+        rdtl = DTLearner(leaf_size=50)
+        rdtl.addEvidence(rtrainX, rtrainY)
+        eval_sample(rdtl, rtrainX, rtrainY, title=f'{name} IS results')
+        eval_sample(rdtl, rtestX, rtestY, title=f'{name} OOS results:')
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python testlearner.py <filename>")
@@ -256,27 +272,27 @@ if __name__ == "__main__":
     eval_sample(dtl, testX, testY, title='out-of-sample results:')
 
     # leaf size overfitting impact on DTLearner
-    test_leaf_size(trainX, trainY, testX, testY, max_size=100,
-                   should_plot=True)
+    # test_leaf_size(trainX, trainY, testX, testY, max_size=100,
+    #               should_plot=True)
 
     # bagging impact on DTLearner
     # test_bagging(trainX, trainY, testX, testY, max_size=100,
     #              should_plot=True)
 
     # cmp dtl and rtl
-    compare_dt_rt(trainX, trainY, testX, testY, max_size=100,
-                  should_plot=True, data_title='ist')
+    # compare_dt_rt(trainX, trainY, testX, testY, max_size=100,
+    #              should_plot=True, data_title='ist')
 
     # cmp dtl and rtl for winequality-red dataset
-    wqinf = open('Data/winequality-red.csv')
-    data = [list(s.strip().split(',')) for s in wqinf.readlines()]
-    data = np.array([list(map(float, vals)) for vals in data])
+    # wqinf = open('Data/winequality-red.csv')
+    # data = [list(s.strip().split(',')) for s in wqinf.readlines()]
+    # data = np.array([list(map(float, vals)) for vals in data])
 
     # print correlation matrix
-    c = np.corrcoef(data, rowvar=False)
-    print(f'correlation matrix: Wine Quality Red')
-    print(c)
+    # c = np.corrcoef(data, rowvar=False)
+    # print(f'correlation matrix: Wine Quality Red')
+    # print(c)
 
-    trainX, trainY, testX, testY = split_data(data, verbose=True)
-    compare_dt_rt(trainX, trainY, testX, testY, max_size=100,
-                  should_plot=True, data_title='weq')
+    # trainX, trainY, testX, testY = split_data(data, verbose=True)
+    # compare_dt_rt(trainX, trainY, testX, testY, max_size=100,
+    #               should_plot=True, data_title='weq')
