@@ -10,17 +10,10 @@ class BagLearner(object):
         return 'cfleisher3'
 
     def addEvidence(self, dataX, dataY):
-        '''
-        Distributes data across bags, with replacement.
-        '''
         for learner in self.learners:
             idxs = np.random.choice(dataX.shape[0], dataX.shape[0])
             trainX, trainY = dataX[idxs], dataY[idxs]
             learner.addEvidence(trainX, trainY)
 
     def query(self, points):
-        '''
-        Average prediction of ensemble.
-        '''
-        outs = np.array([learner.query(points) for learner in self.learners])
-        return np.mean(outs, axis=0)
+        return np.mean(np.array([learner.query(points) for learner in self.learners]), axis=0)
