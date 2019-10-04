@@ -234,6 +234,215 @@ def check_edge_cases():
         eval_sample(rdtl, rtestX, rtestY, title=f'{name} OOS results:')
 
 
+def get_istanbul_data():
+    inf = open('Data/Istanbul.csv')
+    data = [list(s.strip().split(',')) for s in inf.readlines()[1:]]
+    return np.array([list(map(float, vals[1:])) for vals in data])
+
+
+def split_data_into_trials():
+    data = get_istanbul_data()
+    train_pct = 0.6
+    train_rows = int(train_pct*data.shape[0])
+    trials = 10
+
+    tms = np.array([np.full(data.shape[0], False) for _ in np.arange(trials)])
+    for mask in tms:
+        mask[:train_rows] = True
+        np.random.shuffle(mask)
+
+    train_data = np.array([data[mask] for mask in tms])
+    test_data = np.array([data[~mask] for mask in tms])
+    trainX = train_data[:, :, :-1]
+    trainY = train_data[:, :, -1]
+    testX = test_data[:, :, :-1]
+    testY = test_data[:, :, -1]
+    return trainX, trainY, testX, testY
+
+
+def dtl_leaf_size_rmses(trainX, trainY, testX, testY, train_pct=0.6):
+    trials = trainX.shape[0]
+    leaf_rng = np.arange(1, trainX.shape[1] // 5)
+    rmses_train = np.zeros((trials, leaf_rng.shape[0]))
+    rmses_test = np.zeros((trials, leaf_rng.shape[0]))
+    for trial_idx in np.arange(trials):
+        for leaf_size, _ in enumerate(leaf_rng):
+            dtl = DTLearner(leaf_size=leaf_size)
+            dtl.addEvidence(trainX[trial_idx], trainY[trial_idx])
+            train_predY = dtl.query(trainX[trial_idx])
+            test_predY = dtl.query(testX[trial_idx])
+            trobs = trainY.shape[1]
+            teobs = testY.shape[1]
+            tr = math.sqrt(((trainY[trial_idx] - train_predY)**2).sum()/trobs)
+            te = math.sqrt(((testY[trial_idx] - test_predY)**2).sum()/teobs)
+            rmses_train[trial_idx][leaf_size] = tr
+            rmses_test[trial_idx][leaf_size] = te
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    ax.plot(leaf_rng, rmses_train.mean(axis=0),
+            label=f'IS ({train_pct*100:0.0f}%)')
+    ax.plot(leaf_rng, rmses_test.mean(axis=0),
+            label=f'OOS ({(1-train_pct)*100:0.0f}%)')
+    ax.plot(leaf_rng, rmses_test.mean(axis=0)-rmses_train.mean(axis=0),
+            label=f'OOS-IS', c='m')
+    ax.axvspan(6, 20, color='g', alpha=0.4)
+
+    ax.set_xlim((1, leaf_rng[-10]))
+    ax.set_xlabel('Leaf Size', fontweight='bold')
+    ax.set_ylabel(f'RMSE (avg over {trials} trials)', fontweight='bold')
+    ax.set_title(f'DTLearner Generalization Error', fontweight='bold')
+    plt.legend()
+    plt.savefig('dtl_leaf_size_rmses_v1.png')
+    plt.clf()
+    return rmses_train, rmses_test
+
+
+def bgl_leaf_size_rmses(trainX, trainY, testX, testY,
+                        rmses_train, rmses_test, train_pct=0.6):
+    trials = trainX.shape[0]
+    leaf_rng = np.arange(1, trainX.shape[1] // 5)
+    bag_rmses_train = np.zeros((trainX.shape[0], leaf_rng.shape[0]))
+    bag_rmses_test = np.zeros((trainX.shape[0], leaf_rng.shape[0]))
+    bags = 25
+
+    for trial_idx in np.arange(trials):
+        for leaf_idx, leaf_size in enumerate(leaf_rng):
+            bgl = BagLearner(learner=DTLearner, bags=bags,
+                             kwargs=dict(leaf_size=leaf_size))
+            bgl.addEvidence(trainX[trial_idx], trainY[trial_idx])
+
+            train_predY = bgl.query(trainX[trial_idx])
+            test_predY = bgl.query(testX[trial_idx])
+
+            trobs = trainY.shape[1]
+            teobs = testY.shape[1]
+
+            trv = math.sqrt(((trainY[trial_idx]-train_predY)**2).sum()/trobs)
+            tev = math.sqrt(((testY[trial_idx]-test_predY)**2).sum()/teobs)
+
+            bag_rmses_train[trial_idx][leaf_idx] = trv
+            bag_rmses_test[trial_idx][leaf_idx] = tev
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    ax.plot(leaf_rng, bag_rmses_train.mean(axis=0),
+            label=f'IB ({train_pct*100:0.0f}%)')
+    ax.plot(leaf_rng, bag_rmses_test.mean(axis=0),
+            label=f'OOB ({(1-train_pct)*100:0.0f}%)')
+    ax.plot(leaf_rng, bag_rmses_test.mean(axis=0)-bag_rmses_train.mean(axis=0),
+            label=f'OOB-IB', c='m')
+
+    ax.set_xlim((1, leaf_rng[-10]))
+    ax.set_xlabel(f'Leaf Size', fontweight='bold')
+    ax.set_ylabel(f'RMSE (avg over {trials} trials)', fontweight='bold')
+    ax.set_title(f'BagLearner Generalization Error', fontweight='bold')
+    plt.legend()
+    plt.savefig('bgl_leaf_sizes_rmses_v1.png')
+    plt.clf()
+
+    ax = fig.add_subplot(111)
+    dt_gen_err = rmses_test.mean(axis=0)-rmses_train.mean(axis=0)
+    bag_gen_err = bag_rmses_test.mean(axis=0)-bag_rmses_train.mean(axis=0)
+    ax.plot(leaf_rng, dt_gen_err-bag_gen_err, c='m')
+
+    ax.set_xlim((1, leaf_rng[-10]))
+    ax.set_xlabel('Leaf Size', fontweight='bold')
+    ax.set_ylabel(f'RMSE (avg over {trials} trials)', fontweight='bold')
+    ax.set_title(f'DTLearner - BagLearner Generalization Error',
+                 fontweight='bold')
+    plt.savefig('dtl_bgl_gen_err_v1.png')
+    plt.clf()
+
+
+def dtbg_preds(trainX, trainY, testX, testY, train_pct=0.6):
+    bag_rng = np.arange(1, 10)
+    leaf_size = 6
+    trials = 10
+    bagdt_preds_train = np.zeros((trainX.shape[0],
+                                  bag_rng.shape[0],
+                                  trainX.shape[1]))
+    bagdt_preds_test = np.zeros((testX.shape[0],
+                                 bag_rng.shape[0],
+                                 testX.shape[1]))
+    bagrt_preds_train = np.zeros((trainX.shape[0],
+                                  bag_rng.shape[0],
+                                  trainX.shape[1]))
+    bagrt_preds_test = np.zeros((testX.shape[0],
+                                 bag_rng.shape[0],
+                                 testX.shape[1]))
+
+    for trial_idx in np.arange(trials):
+        for bag_idx, bag_size in enumerate(bag_rng):
+            bgl = BagLearner(learner=DTLearner, bags=bag_size,
+                             kwargs=dict(leaf_size=leaf_size))
+            bgl.addEvidence(trainX[trial_idx], trainY[trial_idx])
+            bgl2 = BagLearner(learner=RTLearner, bags=bag_size,
+                              kwargs=dict(leaf_size=leaf_size))
+            bgl2.addEvidence(trainX[trial_idx], trainY[trial_idx])
+
+            train_predY = bgl.query(trainX[trial_idx])
+            test_predY = bgl.query(testX[trial_idx])
+            train2_predY = bgl2.query(trainX[trial_idx])
+            test2_predY = bgl2.query(testX[trial_idx])
+
+            bagdt_preds_train[trial_idx][bag_idx] = train_predY
+            bagdt_preds_test[trial_idx][bag_idx] = test_predY
+            bagrt_preds_train[trial_idx][bag_idx] = train2_predY
+            bagrt_preds_test[trial_idx][bag_idx] = test2_predY
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    bagdt_mean_var = (bagdt_preds_test.std(axis=0)**2).mean(axis=1)
+    bagrt_mean_var = (bagrt_preds_test.std(axis=0)**2).mean(axis=1)
+
+    ax.plot(bag_rng, bagdt_mean_var, label=f'DT OOB Var')
+    ax.plot(bag_rng, bagrt_mean_var, label=f'DT OOB Var')
+
+    ax.set_xlim((1, bag_rng[-1]))
+    ax.set_xlabel('Bag Size', fontweight='bold')
+    ax.set_ylabel('Prediction Variance', fontweight='bold')
+    ax.set_title('DTLearner and RTLearner Prediction Variance',
+                 fontweight='bold')
+    plt.legend()
+    plt.savefig('dtrt_pred_var_v1.png')
+    plt.clf()
+
+
+def dtrt_nodes(trainX, trainY, testX, testY, train_pct=0.6):
+    trials = trainX.shape[0]
+    dt_counts = np.zeros((trials,), dtype=np.uint)
+    rt_counts = np.zeros((trials,), dtype=np.uint)
+    leaf_size = 6
+    for idx in np.arange(trials):
+        dtl = DTLearner(leaf_size=leaf_size)
+        dtl.addEvidence(trainX[idx], trainY[idx])
+        dt_counts[idx] = dtl.tree[~np.isnan(dtl.tree[:, 2])].shape[0]
+
+        rtl = RTLearner(leaf_size=leaf_size)
+        rtl.addEvidence(trainX[idx], trainY[idx])
+        rt_counts[idx] = rtl.tree[~np.isnan(rtl.tree[:, 2])].shape[0]
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    xlocs = np.arange(1, trials+1)
+    bar_w = 0.35
+
+    ax.bar(xlocs-bar_w/2, dt_counts, bar_w, label='DTLearner')
+    ax.bar(xlocs+bar_w/2, rt_counts, bar_w, label='RTLearner')
+
+    ax.set_xlabel('Trial', fontweight='bold')
+    ax.set_ylabel('Node Count', fontweight='bold')
+    ax.set_xticklabels(np.arange(1, trials+1))
+    ax.set_xticks(np.arange(1, trials+1))
+    ax.set_title('DTLearner and RTLearner Node Counts', fontweight='bold')
+    plt.legend(loc=4)
+    plt.savefig('dtrt_nodes_v1.png')
+    plt.clf()
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python testlearner.py <filename>")
@@ -244,32 +453,39 @@ if __name__ == "__main__":
     data = [list(s.strip().split(',')) for s in inf.readlines()[1:]]
     data = np.array([list(map(float, vals[1:])) for vals in data])
 
-    trainX, trainY, testX, testY = split_data(data, verbose=True)
+    trainX, trainY, testX, testY = split_data_into_trials()
+    rmses_train, rmses_test = dtl_leaf_size_rmses(trainX, trainY, testX, testY)
+    bgl_leaf_size_rmses(trainX, trainY, testX, testY,
+                        rmses_train, rmses_test)
+    dtbg_preds(trainX, trainY, testX, testY)
+    dtrt_nodes(trainX, trainY, testX, testY)
+
+    # trainX, trainY, testX, testY = split_data(data, verbose=True)
 
     # print correlation matrix
-    c = np.corrcoef(data, rowvar=False)
-    print(f'correlation matrix: Istanbul')
-    print(c)
+    # c = np.corrcoef(data, rowvar=False)
+    # print(f'correlation matrix: Istanbul')
+    # print(c)
 
     # create linreg learner and train it
-    print(f'\n**** LinRegLearner ****')
-    lrlearn = lrl.LinRegLearner(verbose=True)  # create a LinRegLearner
-    lrlearn.addEvidence(trainX, trainY)  # train it
-    print(lrlearn.author())
+    # print(f'\n**** LinRegLearner ****')
+    # lrlearn = lrl.LinRegLearner(verbose=True)  # create a LinRegLearner
+    # lrlearn.addEvidence(trainX, trainY)  # train it
+    # print(lrlearn.author())
 
     # evaluate learner
-    eval_sample(lrlearn, trainX, trainY, title='in-sample results:')
-    eval_sample(lrlearn, testX, testY, title='out-of-sample results:')
+    # eval_sample(lrlearn, trainX, trainY, title='in-sample results:')
+    # eval_sample(lrlearn, testX, testY, title='out-of-sample results:')
 
     # create dt learner and train it
-    print(f'\n**** DTLearner ****')
-    dtl = DTLearner(leaf_size=50)
-    dtl.addEvidence(trainX, trainY)
-    print(f'author: {dtl.author()}')
+    # print(f'\n**** DTLearner ****')
+    # dtl = DTLearner(leaf_size=50)
+    # dtl.addEvidence(trainX, trainY)
+    # print(f'author: {dtl.author()}')
 
     # evaluate
-    eval_sample(dtl, trainX, trainY, title='in-sample results')
-    eval_sample(dtl, testX, testY, title='out-of-sample results:')
+    # eval_sample(dtl, trainX, trainY, title='in-sample results')
+    # eval_sample(dtl, testX, testY, title='out-of-sample results:')
 
     # leaf size overfitting impact on DTLearner
     # test_leaf_size(trainX, trainY, testX, testY, max_size=100,

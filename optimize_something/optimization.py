@@ -23,8 +23,10 @@ Student Name: Tucker Balch (replace with your name)
 GT User ID: cfleisher3
 GT ID: 903421975
 """
+import math
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import numpy as np
 import datetime as dt
 from scipy.optimize import minimize
@@ -38,6 +40,7 @@ def optimize_portfolio(sd=dt.datetime(2008, 1, 1), ed=dt.datetime(2009, 1, 1),
     # Read in adjusted closing prices for given symbols, date range
     dates = pd.date_range(sd, ed)
     prices_all = get_data(syms, dates)  # automatically adds SPY
+    prices_all.fillna(method='ffill', inplace=True)
     prices = prices_all[syms]  # only portfolio symbols
     prices_SPY = prices_all['SPY']  # only SPY, for comparison later
 
@@ -46,24 +49,38 @@ def optimize_portfolio(sd=dt.datetime(2008, 1, 1), ed=dt.datetime(2009, 1, 1),
     allocs = np.zeros((len(syms),))
     allocs.fill(default_alloc)
 
-    allocs, cr, adr, sddr, sr = calc_stats(prices.values, allocs)
+    if allocs.shape[0] > 1:
+        allocs[-1] = 1.0 - np.sum(allocs[:-1])
 
+    allocs, cr, adr, sddr, sr = calc_stats(prices.values, allocs)
     print_portfolio(prices, syms, allocs)
 
     # Compare daily portfolio value with SPY using a normalized plot
     if gen_plot:
         # indexed daily portfolio values
-        port_val = pd.DataFrame(np.matmul(prices.values, allocs))
-        port_val = port_val / port_val.iloc[0]
+        port_prices = (prices.values*allocs).sum(axis=1)
+        port_val = pd.DataFrame(port_prices/port_prices[0])
         port_val = port_val.set_index(prices.index)
 
-        # indexed daily SPY values
         idx_SPY = prices_SPY / prices_SPY.iloc[0]
 
         # plot indexed portfolio vs SPY
-        plt.plot(port_val, label='Portfolio')
-        plt.plot(idx_SPY, label='SPY')
-        plt.title('Daily Portfolio Value and SPY')
+        fig, ax = plt.subplots()
+        ax.set_title('Daily Portfolio Value and SPY')
+        ax.plot(port_val.index, port_val.values, 'b', label='Portfolio',
+                linewidth=0.5)
+        ax.plot(idx_SPY.index, idx_SPY.values, 'g', label='SPY',
+                linewidth=0.5)
+
+        plt.xlim(port_val.index.values[0], port_val.index.values[-1])
+        miny = math.floor(min(port_val.values.min(),
+                              idx_SPY.values.min())*10)/10
+        maxy = math.ceil(max(port_val.values.max(),
+                             idx_SPY.values.max())*10)/10
+        plt.ylim(miny, maxy)
+        ax.grid(linestyle='--')
+
+        fig.autofmt_xdate()  # rotates and right aligns x labels
         plt.xlabel('Date')
         plt.ylabel('Price')
 
@@ -94,7 +111,7 @@ def print_portfolio(px_df, syms, allocs):
             f'{cr:>10.3f}' \
             f'{adr:>10.3f}' \
             f'{sddr:>10.3f}' \
-            f'{sr:>10.3f}'
+            f'{sr:>10.4f}'
 
     def pxs_to_stats(pxs):
         cr = pxs[-1] / pxs[0] - 1
@@ -128,28 +145,35 @@ def calc_stats(PX, allocs):
     # calcs sharpe ration and relevant portfolio stats
     # returns opt_allocs, cr, adr, sddr, sr
     dr = PX[1:] / PX[:-1] - 1.  # position daily returns
+    # dr = dr / dr[0]
 
     # Sharpe ratio objective function
-    def sharpe_ratio(allocs, DR):
-        pdr = np.dot(DR, allocs)  # portfolio daily returns
-        return np.mean(pdr) / np.std(pdr)
-
-    bnds = tuple([(0, 1) for _ in allocs])
+    bnds = tuple([(0.0, 1.0) for _ in allocs])
     cons = ({'type': 'eq', 'fun': lambda x: 1.0 - np.sum(x)})
-    res = minimize(lambda x, y: -sharpe_ratio(x, y), allocs, args=(dr),
-                   bounds=bnds, constraints=cons)
+    res = minimize(sharpe_ratio,
+                   allocs,
+                   args=(dr,),
+                   bounds=bnds,
+                   constraints=cons,
+                   options={'disp': True},
+                   method='SLSQP')
 
+    print(f'X: {res.x}, Y: {res.fun}')
     # calc stats for optimal allocs
     opt_allocs = res.x
-    port_vals = np.squeeze(np.matmul(PX, opt_allocs))
+    port_vals = (PX*opt_allocs).sum(axis=1)
     cr = port_vals[-1] / port_vals[0] - 1.
     pdr = port_vals[1:] / port_vals[:-1] - 1.
 
-    adr = np.mean(pdr)
-    sddr = np.std(pdr)
-    sr = adr / sddr
+    adr = pdr.mean()
+    sddr = pdr.std()
+    sr = np.sqrt(252)*adr/sddr
 
     return opt_allocs, cr, adr, sddr, sr
+
+
+def sharpe_ratio(allocs, DRS):
+    return -np.dot(DRS, allocs).mean()/np.dot(DRS, allocs).std()
 
 
 def test_code():
@@ -159,9 +183,9 @@ def test_code():
     # Define input parameters
     # Note that ALL of these values will be set to different values by
     # the autograder!
-    start_date = dt.datetime(2009, 1, 1)
-    end_date = dt.datetime(2010, 1, 1)
-    symbols = ['GOOG', 'AAPL', 'GLD', 'XOM', 'IBM']
+    start_date = dt.datetime(2008, 6, 1)
+    end_date = dt.datetime(2009, 6, 1)
+    symbols = ['IBM', 'X', 'GLD', 'JPM']
 
     # Assess the portfolio
     allocs, cr, adr, sddr, sr = optimize_portfolio(
