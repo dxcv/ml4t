@@ -37,30 +37,8 @@ def best4DT(seed=1489683273):
     np.random.seed(seed)
     feat_cnt = np.random.randint(2, 5)
 
-    # correlated features
-    # MU = np.random.random((feat_cnt,))
-    # norm pos semi-def with bias
-    # bias = 0.25
-    # C = np.random.random((feat_cnt, feat_cnt))+bias
-    # C[np.diag_indices(feat_cnt)] = [C[i,:].sum()+1-C[i, i] for i in range(feat_cnt)]
-    # C[np.diag_indices(feat_cnt)] = [C[i, i:].sum()+1 for i in range(feat_cnt)]
-    # C = C+C.T-np.diag(C.diagonal())
-
-    # corr data from cholesky decomposition
-    # L = np.linalg.cholesky(C)
-    # X_uncorr = np.random.multivariate_normal(MU, C, 1000)
-    # X = (np.dot(L, X_uncorr.T)+MU[:, None]).T
-
-    # nonlinearity
     X = np.random.random((1000, feat_cnt))
-    # X_norm = (X-X.mean(axis=0))/np.std(X, axis=0)
-    # Y = np.sin(X_norm.sum(axis=1))
     Y = np.prod(X, axis=1)
-    
-    # data = np.concatenate((X_norm, Y[:, None]), axis=1)
-    # print(f'data shape:{data.shape}')
-    # y_corrs = np.corrcoef(data, rowvar=False)[-1]
-    # print(f'correlations: {y_corrs}')
     return X, Y
 
 
