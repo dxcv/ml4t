@@ -40,6 +40,12 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
     # orders_file may be a string, or it may be a file object
     orders = pd.read_csv(orders_file, index_col=['Date'], parse_dates=True,
                          na_values=['nan']).sort_index()
+
+    # add trade count column for aggregation purposes
+    orders['Trades'] = 1
+
+    # order summary
+    # trade_count = orders.shape[0]
     # print(orders)
     # print()
 
@@ -51,25 +57,38 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
 
     # cvt sells to negatives and drop Order col
     orders = orders.apply(order_sign, axis=1).drop(['Order'], axis=1)
+    # consolidate same day orders and resort
     orders = orders.groupby(['Symbol', 'Date']).sum().reset_index('Symbol')
     orders = orders.sort_index()
 
     # update date range and fill na with 0
     orders = orders.groupby('Symbol') \
         .apply(lambda df: df.resample('D').first()) \
-        .drop(['Symbol'], axis=1).fillna(0)
-    # get cumulative shares
-    orders = orders.groupby('Symbol').cumsum().reset_index()
-    # for sym in symbols:
-    #     print(sym, orders.loc[orders.Symbol == sym].iloc[-1])
+        .drop(['Symbol'], axis=1).fillna(0).reset_index('Symbol')
+
+    orders = orders.sort_index()
+
+    # cumulative shares
+    orders['Shares'] = orders.loc[:, ['Symbol', 'Shares']].groupby('Symbol').cumsum()
 
     # pivot df to match get_data
-    orders = orders.pivot(index='Date', columns='Symbol', values='Shares')
+    # orders = orders.pivot(index='Date', columns='Symbol', values='Shares')
+    # orders = orders.pivot(index='Date', columns='Symbol').swaplevel(i=0, j=1, axis=1)
+    orders = orders.pivot(columns='Symbol').swaplevel(i=0, j=1, axis=1)
+    orders.loc[:, (slice(None), 'Shares')] = orders.loc[:, (slice(None), 'Shares')].fillna(method='ffill')
+    orders = orders.fillna(0)
     # ffill and bfill 0 to handle dates out of order range for ticker
-    orders = orders.fillna(method='ffill').fillna(0)
+    # orders = orders.fillna(method='ffill').fillna(0)
+
+    # get cumulative shares
+    # orders = orders.groupby('Symbol').cumsum().reset_index()
+    # orders.loc[:, (slice(None), 'Shares')] = orders.loc[:, (slice(None), 'Shares')].cumsum()
+    # for sym in symbols:
+    #     print(sym, orders.loc[orders.Symbol == sym].iloc[-1])
+    # print(f'cumulative orders:\n{orders.head()}\n')
 
     # update column names for multiindex Shares
-    orders.columns = pd.MultiIndex.from_product([orders.columns, ['Shares']])
+    # orders.columns = pd.MultiIndex.from_product([orders.columns, ['Shares']])
 
     # get price data and remove SPY
     pxs = get_data(symbols, dates).drop(['SPY'], axis=1)
@@ -77,27 +96,26 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
     # concatenate prices with shares
     portvals = pd.concat([orders, pxs], axis=1, join='outer')
     portvals.loc[:, (slice(None), 'Shares')] = portvals.loc[:, (slice(None), 'Shares')].fillna(method='ffill')
+    portvals.loc[:, (slice(None), 'Trades')] = portvals.loc[:, (slice(None), 'Trades')].fillna(0)
     portvals = portvals.dropna()
     for sym in symbols:
         portvals[sym, 'MV'] = portvals[sym, 'Shares']*portvals[sym, 'Price']
         portvals[sym, 'ShareChg'] = portvals[sym, 'Shares'].diff()
         portvals[sym, 'Commis'] = 0.0
 
-    for idx, row in portvals.iterrows():
-        for sym in symbols:
-            if row[sym, 'ShareChg'] != 0:
-                row[sym, 'Commis'] = -commission
-
     # update na in first row to be shares
     tmp = portvals.iloc[0][:, 'Shares'].sort_index()
     for idx, shares in enumerate(tmp.values):
         portvals.loc[start_date, (tmp.index[idx], 'ShareChg')] = shares
 
-    # portvals.loc[start_date, (slice(None), 'ShareChg')] = tmp.values
+    for idx, row in portvals.iterrows():
+        for sym in symbols:
+            row[sym, 'Commis'] = -row[sym, 'Trades']*commission
+            # if row[sym, 'ShareChg'] > 0 or row[sym, 'ShareChg'] < 0:
+            #     row[sym, 'Commis'] = -commission
 
     # get cash basis
     for sym in symbols:
-        # portvals[sym, 'Basis'] = -portvals[sym, 'ShareChg']*portvals[sym, 'Price']*(1+impact)
         portvals[sym, 'Basis'] = -portvals[sym, 'ShareChg']*portvals[sym, 'Price']*(1+impact)
 
     # cash balance
@@ -113,13 +131,23 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
         else:
             portvals.iloc[idx]['Cash', 'MV'] = portvals.iloc[idx-1]['Cash', 'MV']+val+commis.iloc[idx]
 
-    # print(portvals.head())
+    # commission summary
+    # gross_commis = portvals.loc[:, (slice(None), 'Commis')]
+    # trade_commis = gross_commis[gross_commis != 0].dropna(how='all').fillna(0)
+    # gross_commis_count = gross_commis[gross_commis != 0].count().sum()
+    # gross_commis_sum = gross_commis.sum().sum()
+    # trades = portvals.loc[:, (slice(None), 'Trades')]
+    # tcount = trades[trades != 0]
+    # print(f'Trade Count: {trade_count}')
+    # print(f'Updated Trade Count: {tcount.sum().sum()}')
+    # print(f'Commision Count: {gross_commis_count}')
+    # print(f'Expected Commissions: {-trade_count*commission}')
+    # print(f'Actual Commissions: {gross_commis_sum}')
+    # print(trade_commis)
+
     # generate mv
     mv = portvals.loc[:, (slice(None), 'MV')].sum(axis=1)
 
-    # print(portvals)
-    # print()
-    # print(mv)
     # In the template, instead of computing the value of the portfolio, we just
     # read in the value of IBM over 6 months
     # start_date = dt.datetime(2008, 1, 1)
@@ -138,11 +166,10 @@ def test_code():
     # this is a helper function you can use to test your code
     # note that during autograding his function will not be called.
     # Define input parameters
-    of = "./orders/orders-06.csv"
+    of = "./orders/orders-11.csv"
     sv = 1000000
     # Process orders
-    portvals = compute_portvals(orders_file=of, start_val=sv,
-                                commission=0, impact=0)
+    portvals = compute_portvals(orders_file=of, start_val=sv)
     if isinstance(portvals, pd.DataFrame):
         portvals = portvals[portvals.columns[0]]  # just get the first column
     else:

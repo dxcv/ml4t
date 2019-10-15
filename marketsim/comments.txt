@@ -1,5 +1,5 @@
 <pre>--- Summary ---
-Tests passed: 10 out of 13
+Tests passed: 11 out of 13
 
 --- Details ---
 Test #0: passed 
@@ -11,14 +11,7 @@ Test #5: passed
 Test #6: passed 
 Test #7: passed 
 Test #8: passed 
-Test #9: failed 
-Test case description: Orders 11, commission
-IncorrectOutput: Test failed on one or more output criteria.
-  Inputs:
-{'orders_file': 'orders-11.csv', 'start_val': 1000000, 'commission': 9.95, 'impact': 0.0}
-  Failures:
-   Incorrect final value: 1045680.55, expected 1045700.45
-
+Test #9: passed 
 Test #10: failed 
 Test case description: Orders 12, impact
 IncorrectOutput: Test failed on one or more output criteria.
@@ -33,7 +26,7 @@ IncorrectOutput: Test failed on one or more output criteria.
   Inputs:
 {'orders_file': 'orders-10.csv', 'start_val': 1000000, 'commission': 9.95, 'impact': 0.005}
   Failures:
-   Incorrect final value: 1050281.4500000002, expected 1026658.3265
+   Incorrect final value: 1050291.4000000001, expected 1026658.3265
 
 Test #12: passed 
 </pre>
