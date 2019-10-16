@@ -48,7 +48,7 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
 
     # add trade count column for aggregation purposes
     orders['Trades'] = 1
-
+    # print(orders)
     # get date range and symbols for indices
     symbols = list(orders['Symbol'].unique())
     start_date = pd.to_datetime(orders.index.values[0]).strftime('%Y-%m-%d')
@@ -69,23 +69,37 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
     orders = orders.reset_index().set_index(['Symbol', 'Date']).sort_index()
     portvals = pxs.join(orders)
     portvals['Price'] = portvals['Price'].fillna(method='ffill')
-    portvals['Shares'] = portvals.groupby('Symbol').apply(lambda gdf: gdf.Shares.cumsum().fillna(method='ffill').fillna(0).reset_index('Symbol')).drop(['Symbol'], axis=1)
+
+    # cumulative shares
+    portvals['Shares'] = portvals.groupby('Symbol')['Shares'].cumsum()
+    portvals['Shares'] = portvals.groupby('Symbol')['Shares'] \
+        .fillna(method='ffill').fillna(0)
+
+    # Fill na trades
     portvals['Trades'] = portvals['Trades'].fillna(0)
-    portvals = portvals.sort_index()
 
     # set MV, ShareChg cols; init Commis col
     portvals['MV'] = portvals.Shares*portvals.Price
-    portvals['ShareChg'] = portvals.groupby('Symbol').apply(lambda gdf: gdf.Shares.diff().reset_index('Symbol')).drop(['Symbol'], axis=1)
-    portvals['Commis'] = portvals.groupby('Symbol').apply(lambda gdf: (-gdf.Trades*commission).reset_index('Symbol')).drop(['Symbol'], axis=1)
+    portvals['ShareChg'] = portvals.groupby('Symbol')['Shares'].diff()
+    portvals['Commis'] = -portvals.Trades*commission
 
     # update na in ShareChg col of first row to be Shares
-    portvals = portvals.groupby('Symbol').apply(lambda gdf: update_start(gdf)).sort_index()
+    portvals = portvals.groupby('Symbol').apply(lambda gdf: update_start(gdf))
+    portvals = portvals.sort_index()
 
-    portvals['Impact'] = (portvals.ShareChg/portvals.ShareChg.abs()).fillna(0)*impact+1
+    # trading impact on mkt
+    portvals['Impact'] = (portvals.ShareChg/portvals.ShareChg.abs()) \
+        .fillna(0)*impact+1
+
+    # cost basis pf for trading impact
     portvals['Basis'] = -portvals.ShareChg*portvals.Price*portvals.Impact
-    portvals[['Trades', 'Basis', 'ShareChg', 'Commis']] = portvals.groupby(['Symbol', 'Date'])[['Trades', 'Basis', 'ShareChg', 'Commis']].sum(axis=0)
-    portvals = portvals.groupby(['Symbol', 'Date']).apply(lambda gdf: gdf.drop_duplicates(keep='last').reset_index(['Symbol','Date'])).drop(['Symbol','Date'], axis=1)
-    portvals = portvals.groupby(['Symbol']).apply(lambda gdf: gdf.reset_index().drop_duplicates(subset=['Date'], keep='last').set_index('Date')).drop(['Symbol'], axis=1)
+
+    # consolidate multiple trades in a given day
+    consol = ['Trades', 'Basis', 'ShareChg', 'Commis']
+    portvals[consol] = portvals.groupby(['Symbol', 'Date'])[consol].sum(axis=0)
+    portvals = portvals.reset_index() \
+        .drop_duplicates(subset=['Symbol', 'Date'], keep='last') \
+        .set_index(['Symbol', 'Date'])
 
     # add cash balance
     cashdf = portvals.loc[portvals.index.values[0][0]].copy()
@@ -97,18 +111,20 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
     cashdf.MV = cashdf.Price*cashdf.Shares
     cashdf.Commis = 0.0
     portvals = pd.concat([portvals, cashdf])
+
     # update na in ShareChg col of first row to be Shares
-    portvals = portvals.groupby('Symbol').apply(lambda gdf: update_start(gdf)).sort_index()
+    portvals = portvals.groupby('Symbol').apply(lambda gdf: update_start(gdf))
+    portvals = portvals.sort_index()
 
     # calculate the trade basis
     portvals.loc['CASH'].Impact = 1.0
-    portvals.loc['CASH'].MV = portvals.query('Symbol != "CASH"')[['Basis', 'Commis']].groupby('Date').sum(axis=1).sum(axis=1)
+    nc = portvals.query('Symbol != "CASH"')[['Basis', 'Commis']]
+    portvals.loc['CASH'].MV = nc.groupby('Date').sum(axis=1).sum(axis=1)
     portvals.loc['CASH', 'MV'].iloc[0] += start_val
     portvals.loc['CASH'].MV = portvals.loc['CASH'].MV.cumsum()
 
-    # generate mv
-    mv = portvals.MV.groupby('Date').sum(axis=1)
-    return mv
+    # return the mv
+    return portvals.MV.groupby('Date').sum(axis=1)
 
 
 def author():
