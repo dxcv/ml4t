@@ -48,7 +48,6 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
 
     # add trade count column for aggregation purposes
     orders['Trades'] = 1
-    print(f'{orders}\n')
 
     # get date range and symbols for indices
     symbols = list(orders['Symbol'].unique())
@@ -71,16 +70,8 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
     portvals = pxs.join(orders)
     portvals['Price'] = portvals['Price'].fillna(method='ffill')
     portvals['Shares'] = portvals.groupby('Symbol').apply(lambda gdf: gdf.Shares.cumsum().fillna(method='ffill').fillna(0).reset_index('Symbol')).drop(['Symbol'], axis=1)
-    # portvals['Shares'] = portvals.groupby('Symbol').apply(lambda gdf: gdf.Shares.fillna(method='ffill').fillna(0).reset_index('Symbol')).drop(['Symbol'], axis=1)
     portvals['Trades'] = portvals['Trades'].fillna(0)
     portvals = portvals.sort_index()
-
-    # consolidate same day orders and sort on date index
-    # orders = orders.groupby(['Symbol', 'Date']).sum().reset_index('Symbol')
-    # orders = orders.sort_index()
-
-    # cumulative shares
-    # orders['Shares'] = orders.loc[:, ['Symbol', 'Shares']].groupby('Symbol').cumsum()
 
     # set MV, ShareChg cols; init Commis col
     portvals['MV'] = portvals.Shares*portvals.Price
@@ -92,7 +83,7 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
 
     portvals['Impact'] = (portvals.ShareChg/portvals.ShareChg.abs()).fillna(0)*impact+1
     portvals['Basis'] = -portvals.ShareChg*portvals.Price*portvals.Impact
-    portvals[['Trades', 'Basis', 'ShareChg', 'Commis']] = portvals.groupby(['Symbol', 'Date'])[['Trades', 'Basis', 'ShareChg', 'Commis']].transform('sum')
+    portvals[['Trades', 'Basis', 'ShareChg', 'Commis']] = portvals.groupby(['Symbol', 'Date'])[['Trades', 'Basis', 'ShareChg', 'Commis']].sum(axis=0)
     portvals = portvals.groupby(['Symbol', 'Date']).apply(lambda gdf: gdf.drop_duplicates(keep='last').reset_index(['Symbol','Date'])).drop(['Symbol','Date'], axis=1)
     portvals = portvals.groupby(['Symbol']).apply(lambda gdf: gdf.reset_index().drop_duplicates(subset=['Date'], keep='last').set_index('Date')).drop(['Symbol'], axis=1)
 
@@ -113,19 +104,9 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
     portvals.loc['CASH'].Impact = 1.0
     portvals.loc['CASH'].MV = portvals.query('Symbol != "CASH"')[['Basis', 'Commis']].groupby('Date').sum(axis=1).sum(axis=1)
     portvals.loc['CASH', 'MV'].iloc[0] += start_val
-    # print(f'cashdf portvals:\n{portvals.loc["CASH"].head(20)}')
     portvals.loc['CASH'].MV = portvals.loc['CASH'].MV.cumsum()
 
     # generate mv
-    # print(portvals)
-    # print('IBM')
-    # print(portvals.loc['IBM'])
-    # print(portvals.loc['CASH'])
-    # for sym in symbols:
-    #     print(sym)
-    #     print(portvals.loc[sym].head(20))
-    # print('CASH...')
-    # print(portvals.loc['CASH'].head(20))
     mv = portvals.MV.groupby('Date').sum(axis=1)
     return mv
 
@@ -153,10 +134,6 @@ def test_code():
     cr, adr, stdr, sr = [0.2, 0.01, 0.02, 1.5]
     cr_SPY, adr_SPY, stdr_SPY, sr_SPY = [0.2, 0.01, 0.02, 1.5]
     # Compare portfolio against $SPX
-    # print('result...')
-    # print(portvals.head(20))
-    # for idx, row in enumerate(portvals):
-    #     print(idx, row)
     print(f"Date Range: {start_date} to {end_date}")
     print()
     print(f"Sharpe Ratio of Fund: {sr}")
