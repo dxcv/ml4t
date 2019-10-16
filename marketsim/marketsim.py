@@ -34,6 +34,11 @@ def order_sign(row):
         return row
 
 
+def update_start(groupdf):
+    groupdf.iloc[0]['ShareChg'] = groupdf.iloc[0]['Shares']
+    return groupdf
+
+
 def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
                      commission=9.95, impact=0.005):
     # this is the function the autograder will call to test your code
@@ -43,11 +48,7 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
 
     # add trade count column for aggregation purposes
     orders['Trades'] = 1
-
-    # order summary
-    # trade_count = orders.shape[0]
-    # print(orders)
-    # print()
+    print(f'{orders}\n')
 
     # get date range and symbols for indices
     symbols = list(orders['Symbol'].unique())
@@ -57,104 +58,75 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
 
     # cvt sells to negatives and drop Order col
     orders = orders.apply(order_sign, axis=1).drop(['Order'], axis=1)
-    # consolidate same day orders and resort
-    orders = orders.groupby(['Symbol', 'Date']).sum().reset_index('Symbol')
-    orders = orders.sort_index()
-
-    # update date range and fill na with 0
-    orders = orders.groupby('Symbol') \
-        .apply(lambda df: df.resample('D').first()) \
-        .drop(['Symbol'], axis=1).fillna(0).reset_index('Symbol')
-
-    orders = orders.sort_index()
-
-    # cumulative shares
-    orders['Shares'] = orders.loc[:, ['Symbol', 'Shares']].groupby('Symbol').cumsum()
-
-    # pivot df to match get_data
-    # orders = orders.pivot(index='Date', columns='Symbol', values='Shares')
-    # orders = orders.pivot(index='Date', columns='Symbol').swaplevel(i=0, j=1, axis=1)
-    orders = orders.pivot(columns='Symbol').swaplevel(i=0, j=1, axis=1)
-    orders.loc[:, (slice(None), 'Shares')] = orders.loc[:, (slice(None), 'Shares')].fillna(method='ffill')
-    orders = orders.fillna(0)
-    # ffill and bfill 0 to handle dates out of order range for ticker
-    # orders = orders.fillna(method='ffill').fillna(0)
-
-    # get cumulative shares
-    # orders = orders.groupby('Symbol').cumsum().reset_index()
-    # orders.loc[:, (slice(None), 'Shares')] = orders.loc[:, (slice(None), 'Shares')].cumsum()
-    # for sym in symbols:
-    #     print(sym, orders.loc[orders.Symbol == sym].iloc[-1])
-    # print(f'cumulative orders:\n{orders.head()}\n')
-
-    # update column names for multiindex Shares
-    # orders.columns = pd.MultiIndex.from_product([orders.columns, ['Shares']])
 
     # get price data and remove SPY
     pxs = get_data(symbols, dates).drop(['SPY'], axis=1)
-    pxs.columns = pd.MultiIndex.from_product([pxs.columns, ['Price']])
-    # concatenate prices with shares
-    portvals = pd.concat([orders, pxs], axis=1, join='outer')
-    portvals.loc[:, (slice(None), 'Shares')] = portvals.loc[:, (slice(None), 'Shares')].fillna(method='ffill')
-    portvals.loc[:, (slice(None), 'Trades')] = portvals.loc[:, (slice(None), 'Trades')].fillna(0)
-    portvals = portvals.dropna()
-    for sym in symbols:
-        portvals[sym, 'MV'] = portvals[sym, 'Shares']*portvals[sym, 'Price']
-        portvals[sym, 'ShareChg'] = portvals[sym, 'Shares'].diff()
-        portvals[sym, 'Commis'] = 0.0
+    pxs = pxs.rename_axis('Symbol', axis=1)
+    pxs.index = pxs.index.rename('Date')
+    pxs = pxs.unstack().rename('Price')
+    pxs = pd.DataFrame(pxs)
 
-    # update na in first row to be shares
-    tmp = portvals.iloc[0][:, 'Shares'].sort_index()
-    for idx, shares in enumerate(tmp.values):
-        portvals.loc[start_date, (tmp.index[idx], 'ShareChg')] = shares
+    # merge orders and prices
+    orders = orders.reset_index().set_index(['Symbol', 'Date']).sort_index()
+    portvals = pxs.join(orders)
+    portvals['Price'] = portvals['Price'].fillna(method='ffill')
+    portvals['Shares'] = portvals.groupby('Symbol').apply(lambda gdf: gdf.Shares.cumsum().fillna(method='ffill').fillna(0).reset_index('Symbol')).drop(['Symbol'], axis=1)
+    # portvals['Shares'] = portvals.groupby('Symbol').apply(lambda gdf: gdf.Shares.fillna(method='ffill').fillna(0).reset_index('Symbol')).drop(['Symbol'], axis=1)
+    portvals['Trades'] = portvals['Trades'].fillna(0)
+    portvals = portvals.sort_index()
 
-    for idx, row in portvals.iterrows():
-        for sym in symbols:
-            row[sym, 'Commis'] = -row[sym, 'Trades']*commission
-            # if row[sym, 'ShareChg'] > 0 or row[sym, 'ShareChg'] < 0:
-            #     row[sym, 'Commis'] = -commission
+    # consolidate same day orders and sort on date index
+    # orders = orders.groupby(['Symbol', 'Date']).sum().reset_index('Symbol')
+    # orders = orders.sort_index()
 
-    # get cash basis
-    for sym in symbols:
-        portvals[sym, 'Basis'] = -portvals[sym, 'ShareChg']*portvals[sym, 'Price']*(1+impact)
+    # cumulative shares
+    # orders['Shares'] = orders.loc[:, ['Symbol', 'Shares']].groupby('Symbol').cumsum()
 
-    # cash balance
-    portvals.loc[:, ('Cash', 'MV')] = 0.0
-    portvals.iloc[0, -1] = start_val
-    
-    # update rolling basis
-    basis = portvals.loc[:, (slice(None), 'Basis')].sum(axis=1)
-    commis = portvals.loc[:, (slice(None), 'Commis')].sum(axis=1)
-    for idx, val in enumerate(basis):
-        if idx == 0:
-            portvals.iloc[0]['Cash', 'MV'] = 1e6 + val + commis.iloc[idx]
-        else:
-            portvals.iloc[idx]['Cash', 'MV'] = portvals.iloc[idx-1]['Cash', 'MV']+val+commis.iloc[idx]
+    # set MV, ShareChg cols; init Commis col
+    portvals['MV'] = portvals.Shares*portvals.Price
+    portvals['ShareChg'] = portvals.groupby('Symbol').apply(lambda gdf: gdf.Shares.diff().reset_index('Symbol')).drop(['Symbol'], axis=1)
+    portvals['Commis'] = portvals.groupby('Symbol').apply(lambda gdf: (-gdf.Trades*commission).reset_index('Symbol')).drop(['Symbol'], axis=1)
 
-    # commission summary
-    # gross_commis = portvals.loc[:, (slice(None), 'Commis')]
-    # trade_commis = gross_commis[gross_commis != 0].dropna(how='all').fillna(0)
-    # gross_commis_count = gross_commis[gross_commis != 0].count().sum()
-    # gross_commis_sum = gross_commis.sum().sum()
-    # trades = portvals.loc[:, (slice(None), 'Trades')]
-    # tcount = trades[trades != 0]
-    # print(f'Trade Count: {trade_count}')
-    # print(f'Updated Trade Count: {tcount.sum().sum()}')
-    # print(f'Commision Count: {gross_commis_count}')
-    # print(f'Expected Commissions: {-trade_count*commission}')
-    # print(f'Actual Commissions: {gross_commis_sum}')
-    # print(trade_commis)
+    # update na in ShareChg col of first row to be Shares
+    portvals = portvals.groupby('Symbol').apply(lambda gdf: update_start(gdf)).sort_index()
+
+    portvals['Impact'] = (portvals.ShareChg/portvals.ShareChg.abs()).fillna(0)*impact+1
+    portvals['Basis'] = -portvals.ShareChg*portvals.Price*portvals.Impact
+    portvals[['Trades', 'Basis', 'ShareChg', 'Commis']] = portvals.groupby(['Symbol', 'Date'])[['Trades', 'Basis', 'ShareChg', 'Commis']].transform('sum')
+    portvals = portvals.groupby(['Symbol', 'Date']).apply(lambda gdf: gdf.drop_duplicates(keep='last').reset_index(['Symbol','Date'])).drop(['Symbol','Date'], axis=1)
+    portvals = portvals.groupby(['Symbol']).apply(lambda gdf: gdf.reset_index().drop_duplicates(subset=['Date'], keep='last').set_index('Date')).drop(['Symbol'], axis=1)
+
+    # add cash balance
+    cashdf = portvals.loc[portvals.index.values[0][0]].copy()
+    cashdf = pd.concat([cashdf], keys=['CASH'], names=['Symbol'])
+    cashdf.Price = 1.0
+    cashdf.Shares = start_val
+    cashdf.Trades = 0
+    cashdf.ShareChg = 0
+    cashdf.MV = cashdf.Price*cashdf.Shares
+    cashdf.Commis = 0.0
+    portvals = pd.concat([portvals, cashdf])
+    # update na in ShareChg col of first row to be Shares
+    portvals = portvals.groupby('Symbol').apply(lambda gdf: update_start(gdf)).sort_index()
+
+    # calculate the trade basis
+    portvals.loc['CASH'].Impact = 1.0
+    portvals.loc['CASH'].MV = portvals.query('Symbol != "CASH"')[['Basis', 'Commis']].groupby('Date').sum(axis=1).sum(axis=1)
+    portvals.loc['CASH', 'MV'].iloc[0] += start_val
+    # print(f'cashdf portvals:\n{portvals.loc["CASH"].head(20)}')
+    portvals.loc['CASH'].MV = portvals.loc['CASH'].MV.cumsum()
 
     # generate mv
-    mv = portvals.loc[:, (slice(None), 'MV')].sum(axis=1)
-
-    # In the template, instead of computing the value of the portfolio, we just
-    # read in the value of IBM over 6 months
-    # start_date = dt.datetime(2008, 1, 1)
-    # end_date = dt.datetime(2008, 6, 1)
-    # portvals = get_data(['IBM'], pd.date_range(start_date, end_date))
-    # portvals = portvals[['IBM']]  # remove SPY
-    # rv = pd.DataFrame(index=portvals.index, data=portvals.values)
+    # print(portvals)
+    # print('IBM')
+    # print(portvals.loc['IBM'])
+    # print(portvals.loc['CASH'])
+    # for sym in symbols:
+    #     print(sym)
+    #     print(portvals.loc[sym].head(20))
+    # print('CASH...')
+    # print(portvals.loc['CASH'].head(20))
+    mv = portvals.MV.groupby('Date').sum(axis=1)
     return mv
 
 
@@ -166,10 +138,10 @@ def test_code():
     # this is a helper function you can use to test your code
     # note that during autograding his function will not be called.
     # Define input parameters
-    of = "./orders/orders-11.csv"
+    of = "./orders/orders-01.csv"
     sv = 1000000
     # Process orders
-    portvals = compute_portvals(orders_file=of, start_val=sv)
+    portvals = compute_portvals(orders_file=of, start_val=sv, commission=0.0, impact=0.000)
     if isinstance(portvals, pd.DataFrame):
         portvals = portvals[portvals.columns[0]]  # just get the first column
     else:
@@ -181,6 +153,10 @@ def test_code():
     cr, adr, stdr, sr = [0.2, 0.01, 0.02, 1.5]
     cr_SPY, adr_SPY, stdr_SPY, sr_SPY = [0.2, 0.01, 0.02, 1.5]
     # Compare portfolio against $SPX
+    # print('result...')
+    # print(portvals.head(20))
+    # for idx, row in enumerate(portvals):
+    #     print(idx, row)
     print(f"Date Range: {start_date} to {end_date}")
     print()
     print(f"Sharpe Ratio of Fund: {sr}")
