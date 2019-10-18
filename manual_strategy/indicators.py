@@ -1,6 +1,7 @@
 import os
 import datetime as dt
 import pandas as pd
+from util import get_data
 
 
 def load_data(symbols, dates, addSPY=True):
@@ -31,6 +32,26 @@ def load_data(symbols, dates, addSPY=True):
     df.columns = [c.replace(' ', '') for c in df.columns.values]
 
     # return data sorted in ascending order
+    return df.sort_index()
+
+
+def ml4t_load_data(symbols, dates, addSPY=True,
+                   cols='all'):
+    # check if cols supplied user list or default to all ml4t feats
+    if cols == 'all':
+        cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'Adj Close']
+
+    # create base df with multiindex including SPY
+    mi = pd.MultiIndex.from_product([['SPY']+symbols, dates],
+                                    names=['Symbol', 'Date'])
+    df = pd.DataFrame(index=mi)
+
+    # pull data by col using required util function
+    for col in cols:
+        df_tmp = get_data(symbols, dates, addSPY, col)
+        df_tmp = pd.DataFrame(df_tmp.unstack().rename(col.replace(' ', '')))
+        df_tmp.index = df_tmp.index.rename(['Symbol', 'Date'])
+        df = df.join(df_tmp)
     return df.sort_index()
 
 
@@ -113,5 +134,5 @@ if __name__ == '__main__':
     start_date = dt.datetime(2008, 1, 1)
     end_date = dt.datetime(2009, 12, 31)
     dates = pd.date_range(start_date, end_date)
-    data = load_data(universe, dates)
+    data = ml4t_load_data(universe, dates)
     print(data.info())
