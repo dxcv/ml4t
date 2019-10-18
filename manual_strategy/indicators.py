@@ -83,11 +83,12 @@ def sma(df, n):
     return df.reset_index('Symbol').groupby('Symbol').rolling(n).mean()
 
 
-def rsi(df, window_sizes=[5, 10], standard=True):
+def rsi(df, window_sizes=[5, 10], standard=False):
     """
         RSI = 100 - 100/1+RS
         RS1 = total_gain/total_loss
         RS2 = [((n-1)total_gain+gain_n]/[(n-1)total_loss+loss_n]
+        Note: standard default False given absolute value relevance
     """
     chg = df.copy()
     chg = (chg/chg.shift(1)-1).dropna()
