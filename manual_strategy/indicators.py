@@ -102,7 +102,7 @@ def rsi(df, window_sizes=[5, 10]):
     return df_rsi
 
 
-def pct_bollinger_band(df, window_sizes=[20, 40], k=2, mafn=sma):
+def pct_bollinger_bands(df, window_sizes=[20, 40], k=2, mafn=sma):
     """
         Pct Bollinger Band: (last-upperBB)/(upperBB-lowerBB)
     """
@@ -118,7 +118,7 @@ def pct_bollinger_band(df, window_sizes=[20, 40], k=2, mafn=sma):
     return df_pct_b
 
 
-def bollinger(ma, n, k):
+def bollinger_bands(ma, n, k):
     """
         Bollinger Bands for n window size and k stdevs
         returns upper, lower bands
@@ -126,6 +126,16 @@ def bollinger(ma, n, k):
     groups = ma.reset_index('Symbol').groupby('Symbol')
     std = groups.rolling(n).std()
     return ma+std*k, ma-std*k
+
+
+def bollinger(df, n, k=2, mafn=sma):
+    """
+        Bollinger Value for n window size and k stdevs
+    """
+    groups = df.reset_index('Symbol').groupby('Symbol')
+    ma = mafn(df, n)
+    std = groups.rolling(n).std()
+    return (df-ma)/(k*std)
 
 
 def author():
