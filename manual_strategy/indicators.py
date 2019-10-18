@@ -62,7 +62,7 @@ def sym_to_path(symbol, base_dir=None):
     return os.path.join(base_dir, f'{symbol}.csv')
 
 
-def pct_sma(df, window_sizes=[5, 10]):
+def pct_sma(df, window_sizes=[5, 10], standard=True):
     tmp = df.copy()
     df_pct_sma = pd.DataFrame(index=tmp.index)
     col_names = tmp.columns.values
@@ -70,6 +70,11 @@ def pct_sma(df, window_sizes=[5, 10]):
         pct = tmp/sma(tmp, n)
         pct.columns = [f'{c}_pct_sma_{n}' for c in col_names]
         df_pct_sma = df_pct_sma.join(pct)
+
+    # standardize data across all symbols by feature
+    if standard:
+        df_pct_sma = (df_pct_sma-df_pct_sma.mean())/df_pct_sma.std()
+
     return df_pct_sma
 
 
@@ -78,7 +83,7 @@ def sma(df, n):
     return df.reset_index('Symbol').groupby('Symbol').rolling(n).mean()
 
 
-def rsi(df, window_sizes=[5, 10]):
+def rsi(df, window_sizes=[5, 10], standard=True):
     """
         RSI = 100 - 100/1+RS
         RS1 = total_gain/total_loss
@@ -99,10 +104,15 @@ def rsi(df, window_sizes=[5, 10]):
         rsi = 100-100/(1+rs2.fillna(tgain/tloss))
         rsi.columns = [f'{c}_rsi_{n}' for c in col_names]
         df_rsi = df_rsi.join(rsi)
+
+    if standard:
+        df_rsi = (df_rsi-df_rsi.mean())/df_rsi.std()
+
     return df_rsi
 
 
-def pct_bollinger_bands(df, window_sizes=[20, 40], k=2, mafn=sma):
+def pct_bollinger_bands(df, window_sizes=[20, 40], k=2, mafn=sma,
+                        standard=True):
     """
         Pct Bollinger Band: (last-upperBB)/(upperBB-lowerBB)
     """
@@ -115,6 +125,10 @@ def pct_bollinger_bands(df, window_sizes=[20, 40], k=2, mafn=sma):
         pct_b = (tmp-lower)/(upper-lower)
         pct_b.columns = [f'{c}_pct_bband_{n}' for c in col_names]
         df_pct_b = df_pct_b.join(pct_b)
+
+    if standard:
+        df_pct_b = (df_pct_b-df_pct_b.mean())/df_pct_b.std()
+
     return df_pct_b
 
 
@@ -128,14 +142,18 @@ def bollinger_bands(ma, n, k):
     return ma+std*k, ma-std*k
 
 
-def bollinger(df, n, k=2, mafn=sma):
+def bollinger(df, n, k=2, mafn=sma, standard=True):
     """
         Bollinger Value for n window size and k stdevs
     """
     groups = df.reset_index('Symbol').groupby('Symbol')
     ma = mafn(df, n)
     std = groups.rolling(n).std()
-    return (df-ma)/(k*std)
+    bval = (df-ma)/(k*std)
+    if standard:
+        bval = (bval-bval.mean())/bval.std()
+
+    return bval
 
 
 def author():
