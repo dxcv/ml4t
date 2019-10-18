@@ -29,7 +29,9 @@ def load_data(symbols, dates, addSPY=True):
 
     # remove whitespace from column names
     df.columns = [c.replace(' ', '') for c in df.columns.values]
-    return df
+
+    # return data sorted in ascending order
+    return df.sort_index()
 
 
 def sym_to_path(symbol, base_dir=None):
@@ -40,15 +42,19 @@ def sym_to_path(symbol, base_dir=None):
 
 
 def pct_sma(df, window_sizes=[5, 10]):
-    tmp = df.sort_index()
-    groups = tmp.reset_index('Symbol').groupby('Symbol')
+    tmp = df.copy()
     df_pct_sma = pd.DataFrame(index=tmp.index)
     col_names = tmp.columns.values
-    for ws in window_sizes:
-        sma = tmp / groups.rolling(ws).mean()
-        sma.columns = [f'{c}_pct_sma_{ws}' for c in col_names]
-        df_pct_sma = df_pct_sma.join(sma)
+    for n in window_sizes:
+        pct = tmp/sma(tmp, n)
+        pct.columns = [f'{c}_pct_sma_{n}' for c in col_names]
+        df_pct_sma = df_pct_sma.join(pct)
     return df_pct_sma
+
+
+def sma(df, n):
+    """Simple Moving Average with window size n"""
+    return df.reset_index('Symbol').groupby('Symbol').rolling(n).mean()
 
 
 def rsi(df, window_sizes=[5, 10]):
@@ -57,7 +63,7 @@ def rsi(df, window_sizes=[5, 10]):
         RS1 = total_gain/total_loss
         RS2 = [((n-1)total_gain+gain_n]/[(n-1)total_loss+loss_n]
     """
-    chg = df.sort_index()
+    chg = df.copy()
     chg = (chg/chg.shift(1)-1).dropna()
     gain = chg[chg >= 0].fillna(0)
     loss = chg[chg < 0].abs().fillna(0)
@@ -73,6 +79,32 @@ def rsi(df, window_sizes=[5, 10]):
         rsi.columns = [f'{c}_rsi_{n}' for c in col_names]
         df_rsi = df_rsi.join(rsi)
     return df_rsi
+
+
+def pct_bollinger_band(df, window_sizes=[20, 40], k=2, mafn=sma):
+    """
+        Pct Bollinger Band: (last-upperBB)/(upperBB-lowerBB)
+    """
+    tmp = df.copy()
+    df_pct_b = pd.DataFrame(index=tmp.index)
+    col_names = tmp.columns.values
+    for n in window_sizes:
+        ma = mafn(tmp, n)
+        upper, lower = bollinger(ma, n, k)
+        pct_b = (tmp-lower)/(upper-lower)
+        pct_b.columns = [f'{c}_pct_bband_{n}' for c in col_names]
+        df_pct_b = df_pct_b.join(pct_b)
+    return df_pct_b
+
+
+def bollinger(ma, n, k):
+    """
+        Bollinger Bands for n window size and k stdevs
+        returns upper, lower bands
+    """
+    groups = ma.reset_index('Symbol').groupby('Symbol')
+    std = groups.rolling(n).std()
+    return ma+std*k, ma-std*k
 
 
 if __name__ == '__main__':
