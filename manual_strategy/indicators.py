@@ -128,6 +128,11 @@ def bollinger(ma, n, k):
     return ma+std*k, ma-std*k
 
 
+def author():
+    """Required by ml4t rubric: returns gt username"""
+    return 'cfleisher3'
+
+
 if __name__ == '__main__':
     # todo: reverse sort direction for indicators
     universe = ['JPM', 'GS']

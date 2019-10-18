@@ -52,3 +52,8 @@ def get_learner_data_file(basefilename):
 def get_robot_world_file(basefilename):
     return open(os.path.join(os.environ.get("ROBOT_WORLDS_DIR", 'testworlds/'),
                              basefilename))
+
+
+def author():
+    """required ml4t project rubric: returns gt username"""
+    return 'cfleisher3'
