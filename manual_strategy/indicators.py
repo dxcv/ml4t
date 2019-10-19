@@ -1,6 +1,10 @@
 import os
 import datetime as dt
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib.ticker import LinearLocator
+from matplotlib.gridspec import GridSpec
 from util import get_data
 
 
@@ -22,11 +26,14 @@ def load_data(symbols, dates, addSPY=True):
         df = pd.concat([df, df_tmp])
 
     # conditionally filter SPY trading days
-    if 'SPY' in symbols:
+    if addSPY or 'SPY' in symbols:
         tdays = df.loc['SPY'].index.values
         df = df.loc[(slice(None), tdays), :]
 
+    # pull available trading days from SPY filtered and fillna
     df = df.loc[(slice(None), dates), :]
+    df = df.groupby('Symbol').fillna(method='ffill')
+    df = df.groupby('Symbol').fillna(method='bfill')
 
     # remove whitespace from column names
     df.columns = [c.replace(' ', '') for c in df.columns.values]
@@ -41,17 +48,26 @@ def ml4t_load_data(symbols, dates, addSPY=True,
     if cols == 'all':
         cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'Adj Close']
 
-    # create base df with multiindex including SPY
-    mi = pd.MultiIndex.from_product([['SPY']+symbols, dates],
-                                    names=['Symbol', 'Date'])
-    df = pd.DataFrame(index=mi)
+    df = pd.DataFrame()
 
     # pull data by col using required util function
     for col in cols:
         df_tmp = get_data(symbols, dates, addSPY, col)
-        df_tmp = pd.DataFrame(df_tmp.unstack().rename(col.replace(' ', '')))
-        df_tmp.index = df_tmp.index.rename(['Symbol', 'Date'])
-        df = df.join(df_tmp)
+        df_tmp = pd.concat([df_tmp], keys=[col.replace(' ', '')])
+        df = pd.concat([df, df_tmp])
+
+    df = df.unstack().T
+    df.index = df.index.rename(['Symbol', 'Date'])
+
+    if addSPY or 'SPY' in symbols:
+        tdays = df.loc['SPY'].index.values
+        df = df.loc[(slice(None), tdays), :]
+
+    # pull available trading days from SPY filtered and fillna
+    df = df.loc[(slice(None), dates), :]
+    df = df.groupby('Symbol').fillna(method='ffill')
+    df = df.groupby('Symbol').fillna(method='bfill')
+
     return df.sort_index()
 
 
@@ -162,11 +178,123 @@ def author():
     return 'cfleisher3'
 
 
+def plot_vertical(data, bdata, labels, ylabel=None, bylabel=None,
+                  bbound=None, ubound=None):
+    """
+        data: list of series to plot
+        bdata: series for bottom plot
+        labels: data legend labels
+        ylabel: y-axis label
+        bylabel: bottom y-axis label
+    """
+    X = [s/s[s.first_valid_index()] for s in data]
+
+    fig = plt.figure()
+    gs = GridSpec(2, 1, height_ratios=[2, 1])  # smaller bottom subplot
+    gs.update(hspace=0.025)  # spacing between subplots
+
+    colors = ['b', 'm', 'k', 'y', 'o']
+    line_alpha = 0.7
+
+    ax1 = fig.add_subplot(gs[0])
+    ax1.grid(linestyle='dotted')
+    for i, x in enumerate(X):
+        ax1.plot(x.index.values, x.values,
+                 color=colors[i], alpha=line_alpha,
+                 linewidth=1.5, label=labels[i])
+
+    ax2 = fig.add_subplot(gs[1])
+    ax2.grid(linestyle='dotted')
+    ax2.plot(bdata.index.values, bdata.values,
+             color=colors[len(data)], alpha=line_alpha,
+             linewidth=1.25)
+
+    # set the number of gridlines for both subplots
+    ax1.xaxis.set_major_locator(LinearLocator(7))
+    ax2.xaxis.set_major_locator(LinearLocator(7))
+    ax1.set_xlim(ax2.get_xlim())  # align x-axis of subplots
+
+    # format x-axis dates and hide labels for top plot
+    date_fmt = mdates.DateFormatter('%Y-%m')
+    tc = '0.25'
+    ax1.tick_params(axis='x', which='both', bottom=False,
+                    top=False, labelbottom=False)
+    ax1.tick_params(axis='y', colors=tc)
+    ax2.xaxis.set_major_formatter(date_fmt)
+    ax2.tick_params(colors=tc)
+
+    # background colors
+    bgc = '0.90'
+    ax1.set_facecolor(bgc)
+    ax2.set_facecolor(bgc)
+
+    # frame colors
+    fc = '0.6'
+    plt.setp(ax1.spines.values(), color=fc)
+    plt.setp(ax2.spines.values(), color=fc)
+
+    # axis labels
+    if ylabel:
+        ax1.set_ylabel(ylabel, color=tc)
+    if bylabel:
+        ax2.set_ylabel(bylabel, color=tc)
+
+    # legend
+    leg1 = ax1.legend()
+    for txt in leg1.get_texts():
+        txt.set_color(tc)
+
+    for lh in leg1.legendHandles:
+        lh.set_alpha(line_alpha)
+
+    # shade boundary regions
+    if ubound is not None:
+        above = get_regions(bdata, bdata > ubound)
+        for r in above:
+            ax1.axvspan(*r, color='g', alpha=0.5)
+            ax2.axvspan(*r, color='g', alpha=0.5)
+
+    if bbound is not None:
+        below = get_regions(bdata, bdata < bbound)
+        for r in below:
+            ax1.axvspan(*r, color='r', alpha=0.5)
+            ax2.axvspan(*r, color='r', alpha=0.5)
+
+    plt.show()
+
+
+def get_regions(data, bounds, n=3):
+    """find regions meeting bounds criteria"""
+    umask = bounds
+    for i in range(n):
+        umask = umask & bounds.shift(-i)
+
+    uidxs = umask.index.values
+    uvals = umask.values
+    return [[uidxs[i], uidxs[i+n-1]] for i, v in enumerate(uvals) if v]
+
+
 if __name__ == '__main__':
-    # todo: reverse sort direction for indicators
     universe = ['JPM', 'GS']
     start_date = dt.datetime(2008, 1, 1)
     end_date = dt.datetime(2009, 12, 31)
     dates = pd.date_range(start_date, end_date)
+
     data = ml4t_load_data(universe, dates)
-    print(data.info())
+
+    # get px/sma data and plot
+    # get bollinger data and plot
+    # get rsi data and plot
+    pxs = data.loc['JPM', 'AdjClose']
+    df_pxs = pd.DataFrame(pd.concat([pxs], keys=['JPM'], names=['Symbol']))
+
+    ws = 10
+    df_sma = sma(df_pxs, ws)
+    smas = df_sma.loc['JPM', 'AdjClose']
+
+    df_pct_sma = pct_sma(df_pxs, window_sizes=[ws], standard=False)
+    psmas = df_pct_sma.loc['JPM', f'AdjClose_pct_sma_{ws}']
+
+    plot_vertical([pxs, smas], psmas, ['price', 'sma'],
+                  ylabel='indexed price and sma', bylabel='price to sma',
+                  bbound=0.9, ubound=1.15)
