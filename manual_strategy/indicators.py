@@ -138,7 +138,7 @@ def pct_bollinger_bands(df, window_sizes=[20, 40], k=2, mafn=sma,
     col_names = tmp.columns.values
     for n in window_sizes:
         ma = mafn(tmp, n)
-        upper, lower = bollinger(ma, n, k)
+        lower, upper = bollinger(tmp, ma, n, k)
         pct_b = (tmp-lower)/(upper-lower)
         pct_b.columns = [f'{c}_pct_bband_{n}' for c in col_names]
         df_pct_b = df_pct_b.join(pct_b)
@@ -149,14 +149,14 @@ def pct_bollinger_bands(df, window_sizes=[20, 40], k=2, mafn=sma,
     return df_pct_b
 
 
-def bollinger_bands(ma, n, k):
+def bollinger_bands(df, ma, n, k):
     """
         Bollinger Bands for n window size and k stdevs
-        returns upper, lower bands
+        returns lower, upper bands
     """
-    groups = ma.reset_index('Symbol').groupby('Symbol')
+    groups = df.reset_index('Symbol').groupby('Symbol')
     std = groups.rolling(n).std()
-    return ma+std*k, ma-std*k
+    return ma-std*k, ma+std*k
 
 
 def bollinger(df, n, k=2, mafn=sma, standard=True):
@@ -178,8 +178,86 @@ def author():
     return 'cfleisher3'
 
 
-def plot_vertical(data, bdata, labels, ylabel=None, bylabel=None,
-                  bbound=None, ubound=None):
+def plot_standard(data, labels, ylabel, bbound=None, ubound=None):
+    X = [s/s[s.first_valid_index()] for s in data]
+
+    fig = plt.figure()
+    # gs = GridSpec(2, 1, height_ratios=[2, 1])  # smaller bottom subplot
+    # gs.update(hspace=0.025)  # spacing between subplots
+
+    colors = ['b', 'm', 'k', 'y', 'o']
+    line_alpha = 0.7
+
+    ax1 = fig.add_subplot(111)
+    ax1.grid(linestyle='dotted')
+    for i, x in enumerate(X):
+        ax1.plot(x.index.values, x.values,
+                 color=colors[i], alpha=line_alpha,
+                 linewidth=1.5, label=labels[i])
+
+    # ax2 = fig.add_subplot(gs[1])
+    # ax2.grid(linestyle='dotted')
+    # ax2.plot(bdata.index.values, bdata.values,
+    #          color=colors[len(data)], alpha=line_alpha,
+    #          linewidth=1.25)
+
+    # set the number of gridlines for both subplots
+    ax1.xaxis.set_major_locator(LinearLocator(7))
+    # ax2.xaxis.set_major_locator(LinearLocator(7))
+    # ax1.set_xlim(ax2.get_xlim())  # align x-axis of subplots
+
+    # format x-axis dates and hide labels for top plot
+    date_fmt = mdates.DateFormatter('%Y-%m')
+    tc = '0.25'
+    # ax1.tick_params(axis='x', which='both', bottom=False,
+    #                 top=False, labelbottom=False)
+    ax1.tick_params(axis='y', colors=tc)
+    ax1.xaxis.set_major_formatter(date_fmt)
+    # ax2.xaxis.set_major_formatter(date_fmt)
+    # ax2.tick_params(colors=tc)
+
+    # background colors
+    bgc = '0.90'
+    ax1.set_facecolor(bgc)
+    # ax2.set_facecolor(bgc)
+
+    # frame colors
+    fc = '0.6'
+    plt.setp(ax1.spines.values(), color=fc)
+    # plt.setp(ax2.spines.values(), color=fc)
+
+    # axis labels
+    if ylabel:
+        ax1.set_ylabel(ylabel, color=tc)
+    # if bylabel:
+    #     ax2.set_ylabel(bylabel, color=tc)
+
+    # legend
+    leg1 = ax1.legend()
+    for txt in leg1.get_texts():
+        txt.set_color(tc)
+
+    for lh in leg1.legendHandles:
+        lh.set_alpha(line_alpha)
+
+    # shade boundary regions
+    if ubound is not None:
+        above = get_regions(data[-1], data[-1] > ubound)
+        for r in above:
+            ax1.axvspan(*r, color='g', alpha=0.5)
+            # ax2.axvspan(*r, color='g', alpha=0.5)
+
+    if bbound is not None:
+        below = get_regions(data[-1], data[-1] < bbound)
+        for r in below:
+            ax1.axvspan(*r, color='r', alpha=0.5)
+            # ax2.axvspan(*r, color='r', alpha=0.5)
+
+    plt.show()
+
+
+def plot_vertical(X, bdata, labels, ylabel=None, bylabel=None,
+                  bbound=None, ubound=None, bcnt=3):
     """
         data: list of series to plot
         bdata: series for bottom plot
@@ -187,8 +265,6 @@ def plot_vertical(data, bdata, labels, ylabel=None, bylabel=None,
         ylabel: y-axis label
         bylabel: bottom y-axis label
     """
-    X = [s/s[s.first_valid_index()] for s in data]
-
     fig = plt.figure()
     gs = GridSpec(2, 1, height_ratios=[2, 1])  # smaller bottom subplot
     gs.update(hspace=0.025)  # spacing between subplots
@@ -206,7 +282,7 @@ def plot_vertical(data, bdata, labels, ylabel=None, bylabel=None,
     ax2 = fig.add_subplot(gs[1])
     ax2.grid(linestyle='dotted')
     ax2.plot(bdata.index.values, bdata.values,
-             color=colors[len(data)], alpha=line_alpha,
+             color=colors[len(X)], alpha=line_alpha,
              linewidth=1.25)
 
     # set the number of gridlines for both subplots
@@ -249,13 +325,13 @@ def plot_vertical(data, bdata, labels, ylabel=None, bylabel=None,
 
     # shade boundary regions
     if ubound is not None:
-        above = get_regions(bdata, bdata > ubound)
+        above = get_regions(bdata, bdata > ubound, n=bcnt)
         for r in above:
             ax1.axvspan(*r, color='g', alpha=0.5)
             ax2.axvspan(*r, color='g', alpha=0.5)
 
     if bbound is not None:
-        below = get_regions(bdata, bdata < bbound)
+        below = get_regions(bdata, bdata < bbound, n=bcnt)
         for r in below:
             ax1.axvspan(*r, color='r', alpha=0.5)
             ax2.axvspan(*r, color='r', alpha=0.5)
@@ -283,8 +359,6 @@ if __name__ == '__main__':
     data = ml4t_load_data(universe, dates)
 
     # get px/sma data and plot
-    # get bollinger data and plot
-    # get rsi data and plot
     pxs = data.loc['JPM', 'AdjClose']
     df_pxs = pd.DataFrame(pd.concat([pxs], keys=['JPM'], names=['Symbol']))
 
@@ -295,6 +369,21 @@ if __name__ == '__main__':
     df_pct_sma = pct_sma(df_pxs, window_sizes=[ws], standard=False)
     psmas = df_pct_sma.loc['JPM', f'AdjClose_pct_sma_{ws}']
 
+    pxsmas_data = [s/s[s.first_valid_index()] for s in [pxs, smas]]
     plot_vertical([pxs, smas], psmas, ['price', 'sma'],
                   ylabel='indexed price and sma', bylabel='price to sma',
                   bbound=0.9, ubound=1.15)
+
+    # get bollinger data and plot
+    # df_lband, df_uband = bollinger_bands(df_pxs, df_sma, ws, 2)
+    # uband = df_uband.loc['JPM', 'AdjClose']
+    # lband = df_lband.loc['JPM', 'AdjClose']
+    # df_bval = bollinger(df_pxs, ws, standard=False)
+    # bvals = df_bval.loc['JPM', 'AdjClose']
+    # band_labels = ['price', 'upper band', 'lower band']
+    # pxbd_data = [s/pxs[pxs.first_valid_index()] for s in [pxs, uband, lband]]
+    # plot_vertical(pxbd_data, bvals, band_labels,
+    #               ylabel='indexed price', bylabel='bollinger',
+    #               bbound=-1.0, ubound=0.9, bcnt=2)
+
+    # get rsi data and plot
