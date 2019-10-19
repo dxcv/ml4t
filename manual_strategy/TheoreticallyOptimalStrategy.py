@@ -1,5 +1,6 @@
 import pandas as pd
 import datetime as dt
+import marketsimcode as ms
 from util import get_data
 
 
@@ -58,3 +59,6 @@ if __name__ == '__main__':
     opt_strat = TheoreticallyOptimalStrategy()
     df_trades = opt_strat.testPolicy()
     print(f'Theoretically Optimal Strategy:\n{df_trades.head(10)}')
+    portvals = ms.compute_portvals(df_trades, start_val=1e6,
+                                   commission=0.0, impact=0.0)
+    print(f'Portfolio Values:\n{portvals.head()}')

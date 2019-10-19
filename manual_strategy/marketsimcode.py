@@ -20,10 +20,8 @@ GT ID: 903421975
 """
 
 import pandas as pd
-import numpy as np
 import datetime as dt
-import os
-from util import get_data, plot_data
+from util import get_data
 
 
 def order_sign(row):
@@ -35,7 +33,7 @@ def order_sign(row):
 
 
 def update_start(groupdf):
-    groupdf.iloc[0]['ShareChg'] = groupdf.iloc[0]['Shares']
+    groupdf.ShareChg.iloc[0] = groupdf.iloc[0]['Shares']
     return groupdf
 
 
@@ -43,30 +41,39 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
                      commission=9.95, impact=0.005):
     # this is the function the autograder will call to test your code
     # orders_file may be a string, or it may be a file object
-    orders = pd.read_csv(orders_file, index_col=['Date'], parse_dates=True,
-                         na_values=['nan']).sort_index()
+    if isinstance(orders_file, pd.DataFrame):
+        orders = orders_file.copy()
+    else:
+        orders = pd.read_csv(orders_file, index_col=['Date'], parse_dates=True,
+                             na_values=['nan']).sort_index()
+
+    symbols = list(orders.columns.values)
 
     # add trade count column for aggregation purposes
+    orders['Symbol'] = symbols[0]
+    for symbol in symbols:
+        orders = orders.rename(columns={symbol: 'Shares'})
+
     orders['Trades'] = 1
-    # print(orders)
+
     # get date range and symbols for indices
-    symbols = list(orders['Symbol'].unique())
     start_date = pd.to_datetime(orders.index.values[0]).strftime('%Y-%m-%d')
     end_date = pd.to_datetime(orders.index.values[-1]).strftime('%Y-%m-%d')
     dates = pd.date_range(start_date, end_date)
 
     # cvt sells to negatives and drop Order col
-    orders = orders.apply(order_sign, axis=1).drop(['Order'], axis=1)
+    if 'Order' in orders.columns.values:
+        orders = orders.apply(order_sign, axis=1).drop(['Order'], axis=1)
 
     # get price data and remove SPY
     pxs = get_data(symbols, dates).drop(['SPY'], axis=1)
-    pxs = pxs.rename_axis('Symbol', axis=1)
     pxs.index = pxs.index.rename('Date')
     pxs = pxs.unstack().rename('Price')
     pxs = pd.DataFrame(pxs)
 
     # merge orders and prices
-    orders = orders.reset_index().set_index(['Symbol', 'Date']).sort_index()
+    orders.index = orders.index.rename('Date')
+    orders = orders.reset_index().set_index(['Date']).sort_index()
     portvals = pxs.join(orders)
     portvals['Price'] = portvals['Price'].fillna(method='ffill')
 
@@ -84,6 +91,8 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
     portvals['Commis'] = -portvals.Trades*commission
 
     # update na in ShareChg col of first row to be Shares
+    portvals = portvals.drop(['Symbol'], axis=1)
+    portvals.index = portvals.index.rename('Symbol', level=0)
     portvals = portvals.groupby('Symbol').apply(lambda gdf: update_start(gdf))
     portvals = portvals.sort_index()
 
@@ -138,7 +147,8 @@ def test_code():
     of = "./orders/orders-01.csv"
     sv = 1000000
     # Process orders
-    portvals = compute_portvals(orders_file=of, start_val=sv, commission=0.0, impact=0.000)
+    portvals = compute_portvals(orders_file=of, start_val=sv,
+                                commission=0.0, impact=0.000)
     if isinstance(portvals, pd.DataFrame):
         portvals = portvals[portvals.columns[0]]  # just get the first column
     else:
