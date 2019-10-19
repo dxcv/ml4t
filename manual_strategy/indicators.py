@@ -178,12 +178,9 @@ def author():
     return 'cfleisher3'
 
 
-def plot_standard(data, labels, ylabel, bbound=None, ubound=None):
-    X = [s/s[s.first_valid_index()] for s in data]
-
+def plot_standard(X, labels, ylabel, lbound=None, ubound=None,
+                  lbc='g', ubc='r'):
     fig = plt.figure()
-    # gs = GridSpec(2, 1, height_ratios=[2, 1])  # smaller bottom subplot
-    # gs.update(hspace=0.025)  # spacing between subplots
 
     colors = ['b', 'm', 'k', 'y', 'o']
     line_alpha = 0.7
@@ -195,42 +192,26 @@ def plot_standard(data, labels, ylabel, bbound=None, ubound=None):
                  color=colors[i], alpha=line_alpha,
                  linewidth=1.5, label=labels[i])
 
-    # ax2 = fig.add_subplot(gs[1])
-    # ax2.grid(linestyle='dotted')
-    # ax2.plot(bdata.index.values, bdata.values,
-    #          color=colors[len(data)], alpha=line_alpha,
-    #          linewidth=1.25)
-
     # set the number of gridlines for both subplots
     ax1.xaxis.set_major_locator(LinearLocator(7))
-    # ax2.xaxis.set_major_locator(LinearLocator(7))
-    # ax1.set_xlim(ax2.get_xlim())  # align x-axis of subplots
 
     # format x-axis dates and hide labels for top plot
     date_fmt = mdates.DateFormatter('%Y-%m')
     tc = '0.25'
-    # ax1.tick_params(axis='x', which='both', bottom=False,
-    #                 top=False, labelbottom=False)
     ax1.tick_params(axis='y', colors=tc)
     ax1.xaxis.set_major_formatter(date_fmt)
-    # ax2.xaxis.set_major_formatter(date_fmt)
-    # ax2.tick_params(colors=tc)
 
     # background colors
     bgc = '0.90'
     ax1.set_facecolor(bgc)
-    # ax2.set_facecolor(bgc)
 
     # frame colors
     fc = '0.6'
     plt.setp(ax1.spines.values(), color=fc)
-    # plt.setp(ax2.spines.values(), color=fc)
 
     # axis labels
     if ylabel:
         ax1.set_ylabel(ylabel, color=tc)
-    # if bylabel:
-    #     ax2.set_ylabel(bylabel, color=tc)
 
     # legend
     leg1 = ax1.legend()
@@ -244,20 +225,19 @@ def plot_standard(data, labels, ylabel, bbound=None, ubound=None):
     if ubound is not None:
         above = get_regions(data[-1], data[-1] > ubound)
         for r in above:
-            ax1.axvspan(*r, color='g', alpha=0.5)
-            # ax2.axvspan(*r, color='g', alpha=0.5)
+            ax1.axvspan(*r, color=ubc, alpha=0.5)
 
-    if bbound is not None:
-        below = get_regions(data[-1], data[-1] < bbound)
+    if lbound is not None:
+        below = get_regions(data[-1], data[-1] < lbound)
         for r in below:
-            ax1.axvspan(*r, color='r', alpha=0.5)
-            # ax2.axvspan(*r, color='r', alpha=0.5)
+            ax1.axvspan(*r, color=lbc, alpha=0.5)
 
     plt.show()
+    plt.clf()
 
 
 def plot_vertical(X, bdata, labels, ylabel=None, bylabel=None,
-                  bbound=None, ubound=None, bcnt=3):
+                  lbound=None, ubound=None, bcnt=3, lbc='g', ubc='r'):
     """
         data: list of series to plot
         bdata: series for bottom plot
@@ -327,16 +307,17 @@ def plot_vertical(X, bdata, labels, ylabel=None, bylabel=None,
     if ubound is not None:
         above = get_regions(bdata, bdata > ubound, n=bcnt)
         for r in above:
-            ax1.axvspan(*r, color='g', alpha=0.5)
-            ax2.axvspan(*r, color='g', alpha=0.5)
+            ax1.axvspan(*r, color=ubc, alpha=0.5)
+            ax2.axvspan(*r, color=ubc, alpha=0.5)
 
-    if bbound is not None:
-        below = get_regions(bdata, bdata < bbound, n=bcnt)
+    if lbound is not None:
+        below = get_regions(bdata, bdata < lbound, n=bcnt)
         for r in below:
-            ax1.axvspan(*r, color='r', alpha=0.5)
-            ax2.axvspan(*r, color='r', alpha=0.5)
+            ax1.axvspan(*r, color=lbc, alpha=0.5)
+            ax2.axvspan(*r, color=lbc, alpha=0.5)
 
     plt.show()
+    plt.clf()
 
 
 def get_regions(data, bounds, n=3):
@@ -350,6 +331,54 @@ def get_regions(data, bounds, n=3):
     return [[uidxs[i], uidxs[i+n-1]] for i, v in enumerate(uvals) if v]
 
 
+def display_sma(df, symbol, metric, ws=10, lbound=0.9, ubound=1.15):
+    vals = df.loc[symbol, metric]
+    df_vals = pd.DataFrame(pd.concat([vals], keys=[symbol],
+                                     names=['Symbol']))
+    df_sma = sma(df_vals, ws)
+    smas = df_sma.loc[symbol, metric]
+
+    df_pct_sma = pct_sma(df_vals, window_sizes=[ws],
+                         standard=False)
+    psmas = df_pct_sma.loc[symbol, f'{metric}_pct_sma_{ws}']
+    valssmas_data = [s/s[s.first_valid_index()] for s in [vals, smas]]
+    plot_vertical(valssmas_data, psmas, [metric, 'sma'],
+                  ylabel=f'indexed {metric} and sma',
+                  bylabel=f'{metric} to sma',
+                  lbound=lbound, ubound=ubound)
+
+
+def display_bollinger(df, symbol, metric, ws=10, k=2, lbound=-1.0, ubound=0.9):
+    vals = df.loc[symbol, metric]
+    df_vals = pd.DataFrame(pd.concat([vals], keys=[symbol],
+                           names=['Symbol']))
+    df_sma = sma(df_vals, ws)
+    df_lband, df_uband = bollinger_bands(df_vals, df_sma, ws, 2)
+    uband = df_uband.loc['JPM', 'AdjClose']
+    lband = df_lband.loc['JPM', 'AdjClose']
+    df_bval = bollinger(df_vals, ws, standard=False)
+    bvals = df_bval.loc['JPM', 'AdjClose']
+    band_labels = [metric, 'upper band', 'lower band']
+    bbds = [s/vals[vals.first_valid_index()] for s in [vals, uband, lband]]
+    plot_vertical(bbds, bvals, band_labels,
+                  ylabel=f'indexed {metric}', bylabel='bollinger',
+                  lbound=-1.0, ubound=0.9, bcnt=2)
+
+
+def display_rsi(df, symbol, metric, ws=10, lbound=None, ubound=None):
+    vals = df.loc[symbol, metric]
+    df_vals = pd.DataFrame(pd.concat([vals], keys=[symbol],
+                                     names=['Symbol']))
+    df_rsi = rsi(df_vals, window_sizes=[ws])
+    rsivals = df_rsi.loc['JPM', f'AdjClose_rsi_{ws}']
+    labels = [metric, 'rsi']
+    X = [vals/vals[vals.first_valid_index()]]
+    bvals = rsivals/100
+    plot_vertical(X, bvals, labels,
+                  ylabel=f'indexed {metric} and rsi', bylabel='rsi',
+                  lbound=0.3, ubound=0.7, bcnt=4, lbc='g', ubc='r')
+
+
 if __name__ == '__main__':
     universe = ['JPM', 'GS']
     start_date = dt.datetime(2008, 1, 1)
@@ -357,33 +386,6 @@ if __name__ == '__main__':
     dates = pd.date_range(start_date, end_date)
 
     data = ml4t_load_data(universe, dates)
-
-    # get px/sma data and plot
-    pxs = data.loc['JPM', 'AdjClose']
-    df_pxs = pd.DataFrame(pd.concat([pxs], keys=['JPM'], names=['Symbol']))
-
-    ws = 10
-    df_sma = sma(df_pxs, ws)
-    smas = df_sma.loc['JPM', 'AdjClose']
-
-    df_pct_sma = pct_sma(df_pxs, window_sizes=[ws], standard=False)
-    psmas = df_pct_sma.loc['JPM', f'AdjClose_pct_sma_{ws}']
-
-    pxsmas_data = [s/s[s.first_valid_index()] for s in [pxs, smas]]
-    plot_vertical([pxs, smas], psmas, ['price', 'sma'],
-                  ylabel='indexed price and sma', bylabel='price to sma',
-                  bbound=0.9, ubound=1.15)
-
-    # get bollinger data and plot
-    # df_lband, df_uband = bollinger_bands(df_pxs, df_sma, ws, 2)
-    # uband = df_uband.loc['JPM', 'AdjClose']
-    # lband = df_lband.loc['JPM', 'AdjClose']
-    # df_bval = bollinger(df_pxs, ws, standard=False)
-    # bvals = df_bval.loc['JPM', 'AdjClose']
-    # band_labels = ['price', 'upper band', 'lower band']
-    # pxbd_data = [s/pxs[pxs.first_valid_index()] for s in [pxs, uband, lband]]
-    # plot_vertical(pxbd_data, bvals, band_labels,
-    #               ylabel='indexed price', bylabel='bollinger',
-    #               bbound=-1.0, ubound=0.9, bcnt=2)
-
-    # get rsi data and plot
+    display_sma(data, 'JPM', 'AdjClose')
+    display_bollinger(data, 'JPM', 'AdjClose')
+    display_rsi(data, 'JPM', 'AdjClose')
