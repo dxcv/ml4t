@@ -34,7 +34,17 @@ class TheoreticallyOptimalStrategy:
         if should_plot:
             self.plot_strats(df_cmp, labels=labels)
 
-        return (tp, bp)
+        return df_cmp
+
+    def performance(self, df_strats):
+        pxchg = df_strats/df_strats.shift(1)-1
+        data = {
+            'cr': df_strats.iloc[-1]/df_strats.iloc[0]-1,
+            'std': pxchg.std(),
+            'adr': pxchg.mean(),
+        }
+        metrics = pd.DataFrame(data)
+        return metrics
 
     def testPolicy(self, symbol='JPM', sd=dt.datetime(2008, 1, 1),
                    ed=dt.datetime(2009, 12, 31), sv=1e6):
@@ -195,4 +205,6 @@ class TheoreticallyOptimalStrategy:
 
 if __name__ == '__main__':
     opt_strat = TheoreticallyOptimalStrategy()
-    opt_strat.cmp_benchmark('JPM', should_plot=True)
+    cmps = opt_strat.cmp_benchmark('JPM', should_plot=True)
+    perf_metrics = opt_strat.performance(cmps)
+    print(f'\nstrategy performance metrics\n{perf_metrics}')
