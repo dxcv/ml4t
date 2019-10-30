@@ -12,6 +12,9 @@ class TheoreticallyOptimalStrategy:
     def __init__(self):
         pass
 
+    def author(self):
+        return 'cfleisher3'
+
     def cmp_benchmark(self, symbol, sd=dt.datetime(2008, 1, 1),
                       ed=dt.datetime(2009, 12, 31), sv=1e5,
                       bench_quantity=1e3, commission=0.0,
@@ -201,6 +204,10 @@ class TheoreticallyOptimalStrategy:
 
         plt.show()
         plt.clf()
+
+
+def author():
+    return 'cfleisher3'
 
 
 if __name__ == '__main__':
