@@ -168,9 +168,9 @@ class ManualStrategy:
         return df_cmp
 
     def plot_strats(self, df_strat, trades=None, labels=None, idxd=True,
-                    ylabel=None, show_legend=True, colors=None, line_alpha=0.7,
-                    line_width=1.5, line_style='dotted', tc='0.25',
-                    bgc='0.90', fc='0.6'):
+                    ylabel='indexed mv', show_legend=True, colors=None,
+                    line_alpha=0.7, line_width=1.5, line_style='dotted',
+                    tc='0.25', bgc='0.90', fc='0.6', bylabel='position'):
         """
             params:
             - df_strat: df with dates and strategy values for each col
@@ -230,12 +230,14 @@ class ManualStrategy:
         ax1.tick_params(axis='x', which='both', bottom=False,
                         top=False, labelbottom=False)
         ax1.tick_params(axis='y', colors=tc)
-        ax1.xaxis.set_major_formatter(date_fmt)
+        ax2.xaxis.set_major_formatter(date_fmt)
         ax2.tick_params(colors=tc)
 
         # optional y-axis label
         if ylabel:
             ax1.set_ylabel(ylabel, color=tc)
+        if bylabel:
+            ax2.set_ylabel(bylabel, color=tc)
 
         # format background and frame colors
         ax1.set_facecolor(bgc)
@@ -254,18 +256,18 @@ class ManualStrategy:
 
         # draw vertical lines for position changes
         if trades is not None:
-            buys = (trades > 0.0).values
-            idxs = trades.index.values
-            for i, v in enumerate(buys):
-                if v:
-                    ax1.axvline(x=idxs[i], linewidth=1.5,
-                                color='b', alpha=0.5)
-
-            sells = (trades < 0.0).values
-            for i, v in enumerate(sells):
-                if v:
-                    ax1.axvline(x=idxs[i], linewidth=1.5,
-                                color='k', alpha=0.5)
+            strat_col = df.columns.values[-1]
+            bidxs = trades[trades > 0.0].dropna().index
+            byvals = df[df.index.isin(bidxs)][strat_col]
+            sidxs = trades[trades < 0.0].dropna().index
+            syvals = df[df.index.isin(sidxs)][strat_col]
+            line_height = 0.5
+            line_width = 1.25
+            ax1.bar(x=bidxs, height=line_height, width=line_width,
+                    bottom=byvals, color='b', alpha=line_alpha)
+            ax1.bar(x=sidxs, height=line_height, width=line_width,
+                    bottom=syvals-line_height, color='k',
+                    alpha=line_alpha)
 
         plt.show()
         plt.clf()

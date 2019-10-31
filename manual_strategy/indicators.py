@@ -128,27 +128,6 @@ def rsi(df, window_sizes=[5, 10], standard=False):
     return df_rsi
 
 
-def pct_bollinger_bands(df, window_sizes=[20, 40], k=2, mafn=sma,
-                        standard=True):
-    """
-        Pct Bollinger Band: (last-upperBB)/(upperBB-lowerBB)
-    """
-    tmp = df.copy()
-    df_pct_b = pd.DataFrame(index=tmp.index)
-    col_names = tmp.columns.values
-    for n in window_sizes:
-        # ma = mafn(tmp, n)
-        lower, upper = bollinger(tmp, n, k, mafn=mafn)
-        pct_b = (tmp-lower)/(upper-lower)
-        pct_b.columns = [f'{c}_pct_bband_{n}' for c in col_names]
-        df_pct_b = df_pct_b.join(pct_b)
-
-    if standard:
-        df_pct_b = (df_pct_b-df_pct_b.mean())/df_pct_b.std()
-
-    return df_pct_b
-
-
 def bollinger_bands(df, ma, n, k):
     """
         Bollinger Bands for n window size and k stdevs
@@ -395,6 +374,6 @@ if __name__ == '__main__':
     dates = pd.date_range(start_date, end_date)
 
     data = ml4t_load_data(universe, dates)
-    # display_sma(data, 'JPM', 'AdjClose')
-    display_bollinger(data, 'JPM', 'AdjClose')
-    # display_rsi(data, 'JPM', 'AdjClose')
+    display_sma(data, 'JPM', 'AdjClose')
+    # display_bollinger(data, 'JPM', 'AdjClose')
+    display_rsi(data, 'JPM', 'AdjClose')
