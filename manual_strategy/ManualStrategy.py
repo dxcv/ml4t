@@ -27,14 +27,23 @@ class ManualStrategy:
         dates = pd.date_range(sd, ed)
         df = indi.ml4t_load_data(['JPM'], dates)
         df_pxs = pd.DataFrame(df['AdjClose'])
+        # get volume and px data for vwap
+        vals = df.loc[symbol, 'AdjClose']
+        volvals = df.loc[symbol, 'Volume']
+        df_vwap = pd.concat([vals, volvals], axis=1,
+                            keys=['AdjClose', 'Volume'])
+        df_vwap['Symbol'] = symbol
+        df_vwap = df_vwap.reset_index().set_index(['Symbol', 'Date'])
+
         df_metrics = df_pxs.copy()
 
         # get indicators for adj close data
-        ws = [20, 5, 3]
-        metrics = [indi.pct_sma, indi.rsi, indi.bollinger]
-        standards = [True, False, False]
+        ws = [20, 3, 5]
+        data_inputs = [df_pxs, df_pxs, df_vwap]
+        metrics = [indi.pct_sma, indi.rsi, indi.pct_vwap]
+        standards = [True, False, True]
         for i, metric in enumerate(metrics):
-            df_tmp = metric(df_pxs, window_sizes=[ws[i]],
+            df_tmp = metric(data_inputs[i], window_sizes=[ws[i]],
                             standard=standards[i])
             df_metrics = df_metrics.join(df_tmp, how='inner')
 
@@ -77,20 +86,36 @@ class ManualStrategy:
         df_feats[rsi_key][rsi_lmask] = 1.0
         df_feats[rsi_key][rsi_umask] = -1.0
 
-        bolli_key = f'AdjClose_bollinger_{ws[2]}'
-        df_feats[bolli_key] = 0.0
-        bolli_bcount = 3
-        bolli_bounds = [-1.0, 1.5]
+        vwap_key = f'AdjClose_pct_vwap_{ws[2]}'
+        df_feats[vwap_key] = 0.0
+        vwap_bcount = 3
+        vwap_bounds = [-1.0, 1.0]
 
-        bolli_lmask = df_jpm[bolli_key] < bolli_bounds[0]
-        bolli_umask = df_jpm[bolli_key] > bolli_bounds[1]
-        tmp_bolli_lmask = bolli_lmask.copy()
-        tmp_bolli_umask = bolli_umask.copy()
-        for i in range(bolli_bcount):
-            bolli_lmask = bolli_lmask & tmp_bolli_lmask.shift(i)
-            bolli_umask = bolli_umask & tmp_bolli_umask.shift(i)
-        df_feats[bolli_key][bolli_lmask] = -1.0
-        df_feats[bolli_key][bolli_umask] = 1.0
+        vwap_lmask = df_jpm[vwap_key] < vwap_bounds[0]
+        vwap_umask = df_jpm[vwap_key] > vwap_bounds[1]
+        tmp_vwap_lmask = vwap_lmask.copy()
+        tmp_vwap_umask = vwap_umask.copy()
+        for i in range(vwap_bcount):
+            vwap_lmask = vwap_lmask & tmp_vwap_lmask.shift(i)
+            vwap_umask = vwap_umask & tmp_vwap_umask.shift(i)
+        df_feats[vwap_key][vwap_lmask] = 1.0
+        df_feats[vwap_key][vwap_umask] = -1.0
+
+        if False:
+            bolli_key = f'AdjClose_bollinger_{ws[2]}'
+            df_feats[bolli_key] = 0.0
+            bolli_bcount = 3
+            bolli_bounds = [-1.0, 1.5]
+
+            bolli_lmask = df_jpm[bolli_key] < bolli_bounds[0]
+            bolli_umask = df_jpm[bolli_key] > bolli_bounds[1]
+            tmp_bolli_lmask = bolli_lmask.copy()
+            tmp_bolli_umask = bolli_umask.copy()
+            for i in range(bolli_bcount):
+                bolli_lmask = bolli_lmask & tmp_bolli_lmask.shift(i)
+                bolli_umask = bolli_umask & tmp_bolli_umask.shift(i)
+            df_feats[bolli_key][bolli_lmask] = -1.0
+            df_feats[bolli_key][bolli_umask] = 1.0
 
         # determine trades based on chg in position
         pos = df_feats.sum(axis=1).rolling(10).sum().clip(-2, 2)
@@ -135,13 +160,6 @@ class ManualStrategy:
                                      commission=commission, impact=impact)
         vals = vals.rename(symbol)
         return vals
-
-    def get_regions(self, df, bounds, n=3):
-        """find regions meeting bounds criteria"""
-        umask = bounds
-        for i in range(n):
-            umask = umask & bounds.shift(-i)
-        return umask
 
     def cmp_benchmark(self, symbol, sd=dt.datetime(2008, 1, 1),
                       ed=dt.datetime(2009, 12, 31), sv=1e5,
