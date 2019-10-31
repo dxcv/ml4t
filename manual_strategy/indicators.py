@@ -99,6 +99,22 @@ def sma(df, n):
     return df.reset_index('Symbol').groupby('Symbol').rolling(n).mean()
 
 
+def pct_vwap(df, window_sizes=[5, 10], standard=True):
+    df_pct_vwap = pd.DataFrame(index=df.index)
+    tmp = pd.DataFrame(df.iloc[:, 0]*df.iloc[:, 1],
+                       columns=['weighted'])
+    col_names = [df.columns.values[0]]
+    for n in window_sizes:
+        pct = tmp/sma(tmp, n)
+        pct.columns = [f'{c}_pct_vwap_{n}' for c in col_names]
+        df_pct_vwap = df_pct_vwap.join(pct)
+
+    if standard:
+        df_pct_vwap = (df_pct_vwap-df_pct_vwap.mean())/df_pct_vwap.std()
+
+    return df_pct_vwap
+
+
 def rsi(df, window_sizes=[5, 10], standard=False):
     """
         RSI = 100 - 100/1+RS
@@ -367,6 +383,22 @@ def display_rsi(df, symbol, metric, ws=10, lbound=None, ubound=None):
                   lbound=0.3, ubound=0.7, bcnt=4, lbc='g', ubc='r')
 
 
+def display_vwap(df, symbol, metric, ws=10, lbound=-1.0, ubound=1.0):
+    vals = df.loc[symbol, metric]
+    volvals = df.loc[symbol, 'Volume']
+    df_vals = pd.concat([vals, volvals], axis=1,
+                        keys=[metric, 'Volume'])
+    df_vals['Symbol'] = symbol
+    df_vals = df_vals.reset_index().set_index(['Symbol', 'Date'])
+    df_vwap = pct_vwap(df_vals, window_sizes=[ws], standard=True)
+    vwapvals = df_vwap.loc['JPM', f'{metric}_pct_vwap_{ws}']
+    labels = [metric, 'vwap']
+    X = [vals/vals[vals.first_valid_index()]]
+    plot_vertical(X, vwapvals, labels,
+            ylabel=f'indexed {metric} and vwap', bylabel='vwap',
+            lbound=lbound, ubound=ubound, bcnt=3, lbc='r', ubc='g')
+
+
 if __name__ == '__main__':
     universe = ['JPM', 'GS']
     start_date = dt.datetime(2008, 1, 1)
@@ -374,6 +406,6 @@ if __name__ == '__main__':
     dates = pd.date_range(start_date, end_date)
 
     data = ml4t_load_data(universe, dates)
-    display_sma(data, 'JPM', 'AdjClose')
-    # display_bollinger(data, 'JPM', 'AdjClose')
-    display_rsi(data, 'JPM', 'AdjClose')
+    display_vwap(data, 'JPM', 'AdjClose')
+    # display_sma(data, 'JPM', 'AdjClose')
+    # display_rsi(data, 'JPM', 'AdjClose')
