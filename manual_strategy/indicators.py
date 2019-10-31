@@ -107,7 +107,7 @@ def rsi(df, window_sizes=[5, 10], standard=False):
         Note: standard default False given absolute value relevance
     """
     chg = df.copy()
-    chg = (chg/chg.shift(1)-1).dropna()
+    chg = (chg/chg.shift(1)-1)
     gain = chg[chg >= 0].fillna(0)
     loss = chg[chg < 0].abs().fillna(0)
     gain_grp = gain.reset_index('Symbol').groupby('Symbol')
@@ -137,8 +137,8 @@ def pct_bollinger_bands(df, window_sizes=[20, 40], k=2, mafn=sma,
     df_pct_b = pd.DataFrame(index=tmp.index)
     col_names = tmp.columns.values
     for n in window_sizes:
-        ma = mafn(tmp, n)
-        lower, upper = bollinger(tmp, ma, n, k)
+        # ma = mafn(tmp, n)
+        lower, upper = bollinger(tmp, n, k, mafn=mafn)
         pct_b = (tmp-lower)/(upper-lower)
         pct_b.columns = [f'{c}_pct_bband_{n}' for c in col_names]
         df_pct_b = df_pct_b.join(pct_b)
@@ -159,18 +159,24 @@ def bollinger_bands(df, ma, n, k):
     return ma-std*k, ma+std*k
 
 
-def bollinger(df, n, k=2, mafn=sma, standard=True):
+def bollinger(df, window_sizes=[5, 10], k=2, mafn=sma, standard=True):
     """
         Bollinger Value for n window size and k stdevs
     """
     groups = df.reset_index('Symbol').groupby('Symbol')
-    ma = mafn(df, n)
-    std = groups.rolling(n).std()
-    bval = (df-ma)/(k*std)
-    if standard:
-        bval = (bval-bval.mean())/bval.std()
+    df_bvals = pd.DataFrame(index=df.index)
+    col_names = df.columns.values
+    for n in window_sizes:
+        ma = mafn(df, n)
+        std = groups.rolling(n).std()
+        bval = (df-ma)/(k*std)
+        bval.columns = [f'{c}_bollinger_{n}' for c in col_names]
+        df_bvals = df_bvals.join(bval, how='inner')
 
-    return bval
+    if standard:
+        df_bvals = (df_bvals-df_bvals.mean())/df_bvals.std()
+
+    return df_bvals
 
 
 def author():
@@ -305,6 +311,8 @@ def plot_vertical(X, bdata, labels, ylabel=None, bylabel=None,
 
     # shade boundary regions
     if ubound is not None:
+        print((bdata > ubound).head(50))
+        print(bdata.head(50))
         above = get_regions(bdata, bdata > ubound, n=bcnt)
         for r in above:
             ax1.axvspan(*r, color=ubc, alpha=0.5)
@@ -324,14 +332,15 @@ def get_regions(data, bounds, n=3):
     """find regions meeting bounds criteria"""
     umask = bounds
     for i in range(n):
-        umask = umask & bounds.shift(-i)
+        umask = umask & bounds.shift(i)
 
     uidxs = umask.index.values
-    uvals = umask.values
-    return [[uidxs[i], uidxs[i+n-1]] for i, v in enumerate(uvals) if v]
+    uvls = umask.values
+    um = len(uidxs)-1
+    return [[uidxs[i], uidxs[min(um, i+n-1)]] for i, v in enumerate(uvls) if v]
 
 
-def display_sma(df, symbol, metric, ws=10, lbound=0.9, ubound=1.15):
+def display_sma(df, symbol, metric, ws=10, lbound=-1.5, ubound=1.5):
     vals = df.loc[symbol, metric]
     df_vals = pd.DataFrame(pd.concat([vals], keys=[symbol],
                                      names=['Symbol']))
@@ -339,13 +348,13 @@ def display_sma(df, symbol, metric, ws=10, lbound=0.9, ubound=1.15):
     smas = df_sma.loc[symbol, metric]
 
     df_pct_sma = pct_sma(df_vals, window_sizes=[ws],
-                         standard=False)
+                         standard=True)
     psmas = df_pct_sma.loc[symbol, f'{metric}_pct_sma_{ws}']
     valssmas_data = [s/s[s.first_valid_index()] for s in [vals, smas]]
     plot_vertical(valssmas_data, psmas, [metric, 'sma'],
                   ylabel=f'indexed {metric} and sma',
-                  bylabel=f'{metric} to sma',
-                  lbound=lbound, ubound=ubound)
+                  bylabel=f'{metric} to sma', lbound=lbound,
+                  ubound=ubound, lbc='r', ubc='g', bcnt=3)
 
 
 def display_bollinger(df, symbol, metric, ws=10, k=2, lbound=-1.0, ubound=0.9):
@@ -356,13 +365,13 @@ def display_bollinger(df, symbol, metric, ws=10, k=2, lbound=-1.0, ubound=0.9):
     df_lband, df_uband = bollinger_bands(df_vals, df_sma, ws, 2)
     uband = df_uband.loc['JPM', 'AdjClose']
     lband = df_lband.loc['JPM', 'AdjClose']
-    df_bval = bollinger(df_vals, ws, standard=False)
-    bvals = df_bval.loc['JPM', 'AdjClose']
+    df_bval = bollinger(df_vals, window_sizes=[ws], standard=False)
+    bvals = df_bval.loc['JPM', f'AdjClose_bollinger_{ws}']
     band_labels = [metric, 'upper band', 'lower band']
     bbds = [s/vals[vals.first_valid_index()] for s in [vals, uband, lband]]
     plot_vertical(bbds, bvals, band_labels,
                   ylabel=f'indexed {metric}', bylabel='bollinger',
-                  lbound=-1.0, ubound=0.9, bcnt=2)
+                  lbound=-1.0, ubound=0.9, bcnt=2, lbc='r', ubc='g')
 
 
 def display_rsi(df, symbol, metric, ws=10, lbound=None, ubound=None):
@@ -386,6 +395,6 @@ if __name__ == '__main__':
     dates = pd.date_range(start_date, end_date)
 
     data = ml4t_load_data(universe, dates)
-    display_sma(data, 'JPM', 'AdjClose')
+    # display_sma(data, 'JPM', 'AdjClose')
     display_bollinger(data, 'JPM', 'AdjClose')
-    display_rsi(data, 'JPM', 'AdjClose')
+    # display_rsi(data, 'JPM', 'AdjClose')
