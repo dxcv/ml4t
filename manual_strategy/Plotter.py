@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
 from matplotlib import cm
-from matplotlib.ticker import LinearLocator
+from matplotlib.ticker import LinearLocator, StrMethodFormatter
 from matplotlib.gridspec import GridSpec
 
 
@@ -15,7 +15,7 @@ class Plotter:
     def __init__(self, stacked_hratios=[2, 1], line_alpha=0.7, line_width=1.2,
                  grid_style='dotted', xtickcnt=7, date_fmt='%Y-%m',
                  tick_color='0.25', bgc='0.90', fc='0.60',
-                 highlight_alpha=0.4):
+                 highlight_alpha=0.4, title_color='0.15', num_fmt='{x:,.1f}'):
         """
         params:
         - stacked_hratios: height ratios of stacked plots
@@ -28,6 +28,7 @@ class Plotter:
         - bgc: background color (default grayscale)
         - fc: frame color (default grayscale)
         - highlight_alpha: highlighted region alpha
+        - title_color: title color (grayscale)
         """
         # default stacked plot settings for grid
         if len(stacked_hratios) != 2:
@@ -48,62 +49,36 @@ class Plotter:
         self.grid_style = grid_style
         self.xtickcnt = 7
         self.date_fmt = mdates.DateFormatter(date_fmt)
+        self.num_fmt = StrMethodFormatter(num_fmt)
         self.tick_color = tick_color
         self.bgc = bgc
         self.fc = fc
+        self.title_color = title_color
 
     def author(self):
         return 'cfleisher3'
 
     def stacked_plot(self, X1, X2, x1_labels=None, x2_labels=None,
                      yax_labels=None, show_top_leg=True, show_bot_leg=False,
-                     y_constraints=None, save_path=None, should_show=True):
+                     ycs=None, save_path=None, should_show=True, title=None):
         """
-            X1: list of pd series for top plot
-            X2: list of pd series for bottom plot
-            x1_labels: X1 legend labels; defaults to series number
-            x2_labels: X2 legend labels; defaults to series number
+            X1: pd df with each column a line for top plot
+            X2: pd df with each column a line for bottom plot
             yax_labels: list of ylabels; if len 1 no x2 label
             show_top_leg: top plot legend toggle
             show_bot_leg: bottom plot legend toggle
-            y_constraints: list of y constraints [src, [op, threshold, freq]]
+            ycs: list of y constraints [src, [op, threshold, freq]]
                 - example: [[1, ['>', 1.2, 4]]]
                 - each constraint drawn on ax1 but src may be either ax
             save_path: path to save figures
             should_show: bool toggle for displaying plot
+            title: chart title str
         """
+        DATA = [X1, X2]
         fig = plt.figure()
         gs = GridSpec(*self._stacked_shape,
                       height_ratios=self.stacked_hratios,
                       hspace=self._hspace)
-
-        ax1 = fig.add_subplot(gs[0])
-        ax2 = fig.add_subplot(gs[1])
-        axes = [ax1, ax2]
-        X = [X1, X2]
-
-        fig.align_ylabels(axes)
-
-        # series line colors
-        self.colors = [self._get_colors(len(X1)), self._get_colors(len(X2))]
-
-        # data series labels used for legend
-        series_labels = [x1_labels, x2_labels]
-
-        if x1_labels is None:
-            series_labels[0] = [f'series {i+1}' for i in range(len(X1))]
-
-        if x2_labels is None:
-            series_labels[1] = [f'series {i+1}' for i in range(len(X2))]
-
-        # plot series lines for grid subplots
-        for x, c, l in zip(X1, self.colors[0], series_labels[0]):
-            ax1.plot(x.index, x, color=c, label=l, alpha=self.line_alpha,
-                     linewidth=self.line_width)
-
-        for x, c, l in zip(X2, self.colors[1], series_labels[1]):
-            ax2.plot(x.index, x, color=c, label=l, alpha=self.line_alpha,
-                     linewidth=self.line_width)
 
         # check for y-axis labels and clean
         if yax_labels is None:
@@ -113,51 +88,63 @@ class Plotter:
             yax_labels.append(None)
 
         # outliers areas and highlight colors
-        if y_constraints is not None:
-            oidxs = [self._outlier_idxs(X[src], c) for src, c in y_constraints]
-            hcolors = self._get_colors(len(oidxs))
+        if ycs is not None:
+            outs = [self._outlier_idxs(DATA[i-1], c) for i, c in ycs]
+            hcolors = self._get_colors(len(outs))
 
         legend_toggles = [show_top_leg, show_bot_leg]
 
-        # format axes
-        ax_inputs = zip(axes, yax_labels, legend_toggles)
-        for ax, ylabel, show_legend in ax_inputs:
-            ax.xaxis.set_major_locator(LinearLocator(self.xtickcnt))
-            ax.xaxis.set_major_formatter(self.date_fmt)
-            ax.tick_params(colors=self.tick_color)
-            ax.set_facecolor(self.bgc)
-            plt.setp(ax.spines.values(), color=self.fc)
+        axes = []
+        for i, X in enumerate(DATA):
+            ax = fig.add_subplot(gs[i])
+            axes.append(ax)
+            colors = self._get_colors(X.shape[1])
+            if i == 0:
+                ax.set_title(title, color=self.title_color)
 
             # add gridlines
             if self.grid_style is not None:
                 ax.grid(linestyle=self.grid_style)
 
             # add ylabel
-            if ylabel:
-                ax.set_ylabel(ylabel, color=self.tick_color)
+            if yax_labels[i] is not None:
+                ax.set_ylabel(yax_labels[i], color=self.tick_color)
+
+            for j, col in enumerate(X.columns.values):
+                x = X[col]
+                ax.plot(x.index, x, color=colors[j], label=col,
+                        alpha=self.line_alpha, linewidth=self.line_width)
+
+                ax.xaxis.set_major_locator(LinearLocator(self.xtickcnt))
+                ax.xaxis.set_major_formatter(self.date_fmt)
+                ax.yaxis.set_major_formatter(self.num_fmt)
+                ax.tick_params(colors=self.tick_color)
+                ax.set_facecolor(self.bgc)
+                plt.setp(ax.spines.values(), color=self.fc)
+
+            # highlight outliers
+            if ycs is not None:
+                ylims = ax.get_ylim()
+                print(ylims)
+                # highlight each set of indices for constraint outliers
+                for df_out, hc in zip(outs, hcolors):
+                    ax.bar(x=df_out.index, height=ylims[1]-ylims[0],
+                           bottom=ylims[0], width=self.line_width,
+                           color=hc, alpha=self.highlight_alpha)
 
             # add legend
-            if show_legend:
+            if legend_toggles[i]:
                 leg = ax.legend()
                 for txt in leg.get_texts():
                     txt.set_color(self.tick_color)
                 for leghand in leg.legendHandles:
                     leghand.set_alpha(self.line_alpha)
 
-            # highlight outliers
-            if y_constraints is not None:
-                ylims = ax.get_ylim()
-                # highlight each set of indices for constraint outliers
-                for idxs, hc in zip(oidxs, hcolors):
-                    ax.bar(x=idxs, height=ylims[1], width=self.line_width,
-                           color=hc, alpha=self.highlight_alpha)
-
-        # align x-axis of ax1 with x-axis of ax2
+        # align axes and hide top plot x-axis
+        fig.align_ylabels(axes)
         axes[0].set_xlim(axes[1].get_xlim())
-
-        # hide top plot x-axis
-        ax1.tick_params(axis='x', which='both', bottom=False,
-                        top=False, labelbottom=False)
+        axes[0].tick_params(axis='x', which='both', bottom=False,
+                            top=False, labelbottom=False)
 
         # storage and display
         if save_path is not None:
@@ -179,7 +166,13 @@ class Plotter:
             - indices meeting constraint
         """
         op, threshold, min_size = constraint
-        return X[op(X, threshold)]
+        op = self._get_operator(op)
+        mask = op(X, threshold)
+        return X[mask].dropna()
+        # tmp = mask.copy()
+        # for i in range(min_size):
+        #     mask = mask & tmp.shift(i)
+        # return X[mask]
 
     def _outlier_area(self, X, constraint):
         """
@@ -207,9 +200,9 @@ class Plotter:
     def _get_operator(self, op):
         return {
             '>': operator.gt,
-            '>=': operator.gte,
+            '>=': operator.ge,
             '<': operator.lt,
-            '<=': operator.lte,
+            '<=': operator.le,
             '=': operator.eq,
         }[op]
 

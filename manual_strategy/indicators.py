@@ -6,6 +6,7 @@ import matplotlib.dates as mdates
 from matplotlib.ticker import LinearLocator
 from matplotlib.gridspec import GridSpec
 from util import get_data
+from Plotter import Plotter
 
 
 def load_data(symbols, dates, addSPY=True):
@@ -345,11 +346,15 @@ def display_sma(df, symbol, metric, ws=10, lbound=-1.5, ubound=1.5):
     df_pct_sma = pct_sma(df_vals, window_sizes=[ws],
                          standard=True)
     psmas = df_pct_sma.loc[symbol, f'{metric}_pct_sma_{ws}']
-    valssmas_data = [s/s[s.first_valid_index()] for s in [vals, smas]]
-    plot_vertical(valssmas_data, psmas, [metric, 'sma'],
-                  ylabel=f'indexed {metric} and sma',
-                  bylabel=f'{metric} to sma', lbound=lbound,
-                  ubound=ubound, lbc='r', ubc='g', bcnt=3)
+    vals = vals/vals[vals.first_valid_index()]
+    smas = smas/smas[smas.first_valid_index()]
+    x1 = pd.DataFrame({metric: vals, 'sma': smas})
+    x2 = pd.DataFrame({'norm pct sma': psmas})
+
+    plotter = Plotter()
+    ycs = [[2, ['<', -1.5, 20]], [2, ['>', 1.5, 20]]]
+    plotter.stacked_plot(x1, x2, yax_labels=['indexed', 'norm pct sma'],
+                         title=f'{symbol} {metric} SMA', ycs=ycs)
 
 
 def display_bollinger(df, symbol, metric, ws=10, k=2, lbound=-1.0, ubound=0.9):
@@ -394,9 +399,9 @@ def display_vwap(df, symbol, metric, ws=10, lbound=-1.0, ubound=1.0):
     vwapvals = df_vwap.loc['JPM', f'{metric}_pct_vwap_{ws}']
     labels = [metric, 'vwap']
     X = [vals/vals[vals.first_valid_index()]]
-    plot_vertical(X, vwapvals, labels,
-            ylabel=f'indexed {metric} and vwap', bylabel='vwap',
-            lbound=lbound, ubound=ubound, bcnt=3, lbc='r', ubc='g')
+    plot_vertical(X, vwapvals, labels, ylabel=f'indexed {metric} and vwap',
+                  bylabel='vwap', lbound=lbound, ubound=ubound, bcnt=3,
+                  lbc='r', ubc='g')
 
 
 if __name__ == '__main__':
@@ -406,6 +411,6 @@ if __name__ == '__main__':
     dates = pd.date_range(start_date, end_date)
 
     data = ml4t_load_data(universe, dates)
-    display_vwap(data, 'JPM', 'AdjClose')
-    # display_sma(data, 'JPM', 'AdjClose')
+    # display_vwap(data, 'JPM', 'AdjClose')
+    display_sma(data, 'JPM', 'AdjClose')
     # display_rsi(data, 'JPM', 'AdjClose')
