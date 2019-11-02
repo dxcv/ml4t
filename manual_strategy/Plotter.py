@@ -54,6 +54,7 @@ class Plotter:
         self.bgc = bgc
         self.fc = fc
         self.title_color = title_color
+        self.xhline_color = '0.1'
 
     def author(self):
         return 'cfleisher3'
@@ -73,6 +74,7 @@ class Plotter:
             save_path: path to save figures
             should_show: bool toggle for displaying plot
             title: chart title str
+            yc_key: used as bottom of constraint drawings
         """
         DATA = [X1, X2]
         fig = plt.figure()
@@ -125,12 +127,24 @@ class Plotter:
             # highlight outliers
             if ycs is not None:
                 ylims = ax.get_ylim()
-                print(ylims)
                 # highlight each set of indices for constraint outliers
-                for df_out, hc in zip(outs, hcolors):
-                    ax.bar(x=df_out.index, height=ylims[1]-ylims[0],
-                           bottom=ylims[0], width=self.line_width,
-                           color=hc, alpha=self.highlight_alpha)
+                if i == 0:
+                    col = X.columns.values[0]
+                    for ycidx, df_out in enumerate(outs):
+                        # first long second short
+                        h = (ylims[1]-ylims[0])*0.2
+                        vals = X[X.index.isin(df_out.index)][col]
+                        if ycidx == 1:
+                            vals = vals-h
+                        ax.bar(x=df_out.index, height=h,
+                               bottom=vals, width=self.line_width,
+                               color=hcolors[ycidx],
+                               alpha=self.highlight_alpha)
+                else:
+                    # draw dashed threshold
+                    for _, constraint in ycs:
+                        ax.axhline(constraint[1], color=self.xhline_color,
+                                   alpha=self.line_alpha, ls=self.grid_style)
 
             # add legend
             if legend_toggles[i]:
