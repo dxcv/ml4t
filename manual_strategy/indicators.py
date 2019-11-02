@@ -352,9 +352,13 @@ def display_sma(df, symbol, metric, ws=10, lbound=-1.5, ubound=1.5):
     x2 = pd.DataFrame({'norm pct sma': psmas})
 
     plotter = Plotter()
-    ycs = [[2, ['<', -1.5, 20]], [2, ['>', 1.5, 20]]]
-    plotter.stacked_plot(x1, x2, yax_labels=['indexed', 'norm pct sma'],
-                         title=f'{symbol} {metric} SMA', ycs=ycs)
+    ycs = [[2, ['<', -1.5, 4]], [2, ['>', 1.5, 4]]]
+    yax_labels = [f'indexed {metric}, sma', 'norm pct sma']
+    colors = [[(0.6, 0.13, 0.79), (0.79, 0.5, 0.13)], [(0.35, 0.35, 0.35)]]
+    hcolors = [(0, 0, 1), (0, 0, 0)]
+    plotter.stacked_plot(x1, x2, yax_labels=yax_labels,
+                         title=f'{symbol} {metric} SMA', ycs=ycs,
+                         colors=colors, hcolors=hcolors)
 
 
 def display_bollinger(df, symbol, metric, ws=10, k=2, lbound=-1.0, ubound=0.9):
@@ -380,12 +384,17 @@ def display_rsi(df, symbol, metric, ws=10, lbound=None, ubound=None):
                                      names=['Symbol']))
     df_rsi = rsi(df_vals, window_sizes=[ws])
     rsivals = df_rsi.loc['JPM', f'AdjClose_rsi_{ws}']
-    labels = [metric, 'rsi']
-    X = [vals/vals[vals.first_valid_index()]]
-    bvals = rsivals/100
-    plot_vertical(X, bvals, labels,
-                  ylabel=f'indexed {metric} and rsi', bylabel='rsi',
-                  lbound=0.3, ubound=0.7, bcnt=4, lbc='g', ubc='r')
+    vals = vals/vals[vals.first_valid_index()]
+    rsivals = rsivals/100
+    x1 = pd.DataFrame({metric: vals})
+    x2 = pd.DataFrame({'rsi': rsivals})
+    plotter = Plotter()
+    ycs = [[2, ['<', 0.3, 4]], [2, ['>', 0.7, 4]]]
+    colors = [[(0.6, 0.13, 0.79)], [(0.35, 0.35, 0.35)]]
+    hcolors = [(0, 0, 1), (0, 0, 0)]
+    plotter.stacked_plot(x1, x2, yax_labels=[f'indexed {metric}', 'rsi'],
+                         title=f'{symbol} {metric} RSI', ycs=ycs,
+                         colors=colors, hcolors=hcolors)
 
 
 def display_vwap(df, symbol, metric, ws=10, lbound=-1.0, ubound=1.0):
@@ -397,11 +406,19 @@ def display_vwap(df, symbol, metric, ws=10, lbound=-1.0, ubound=1.0):
     df_vals = df_vals.reset_index().set_index(['Symbol', 'Date'])
     df_vwap = pct_vwap(df_vals, window_sizes=[ws], standard=True)
     vwapvals = df_vwap.loc['JPM', f'{metric}_pct_vwap_{ws}']
-    labels = [metric, 'vwap']
-    X = [vals/vals[vals.first_valid_index()]]
-    plot_vertical(X, vwapvals, labels, ylabel=f'indexed {metric} and vwap',
-                  bylabel='vwap', lbound=lbound, ubound=ubound, bcnt=3,
-                  lbc='r', ubc='g')
+    vwapvals = vwapvals/vwapvals[vwapvals.first_valid_index()]
+    volvals = volvals/volvals[volvals.first_valid_index()]
+    vals = vals/vals[vals.first_valid_index()]
+    x1 = pd.DataFrame({metric: vals})
+    x2 = pd.DataFrame({'vwap': vwapvals})
+    plotter = Plotter()
+    ycs = [[2, ['<', -1.5, 1]], [2, ['>', 2.0, 1]]]
+    colors = [[(0.6, 0.13, 0.79)], [(0.35, 0.35, 0.35)]]
+    hcolors = [(0, 0, 1), (0, 0, 0)]
+    yax_labels = [f'indexed {metric}. volume', 'norm pct vwap']
+    plotter.stacked_plot(x1, x2, yax_labels=yax_labels,
+                         title=f'{symbol} {metric} VWAP', ycs=ycs,
+                         colors=colors, hcolors=hcolors)
 
 
 if __name__ == '__main__':
@@ -411,6 +428,6 @@ if __name__ == '__main__':
     dates = pd.date_range(start_date, end_date)
 
     data = ml4t_load_data(universe, dates)
-    # display_vwap(data, 'JPM', 'AdjClose')
+    display_vwap(data, 'JPM', 'AdjClose')
     display_sma(data, 'JPM', 'AdjClose')
-    # display_rsi(data, 'JPM', 'AdjClose')
+    display_rsi(data, 'JPM', 'AdjClose')

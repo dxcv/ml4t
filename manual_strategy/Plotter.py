@@ -61,7 +61,8 @@ class Plotter:
 
     def stacked_plot(self, X1, X2, x1_labels=None, x2_labels=None,
                      yax_labels=None, show_top_leg=True, show_bot_leg=False,
-                     ycs=None, save_path=None, should_show=True, title=None):
+                     ycs=None, save_path=None, should_show=True, title=None,
+                     colors=None, hcolors=None):
         """
             X1: pd df with each column a line for top plot
             X2: pd df with each column a line for bottom plot
@@ -75,6 +76,8 @@ class Plotter:
             should_show: bool toggle for displaying plot
             title: chart title str
             yc_key: used as bottom of constraint drawings
+            colors: used for lines
+            hcolors: used for constraint lines
         """
         DATA = [X1, X2]
         fig = plt.figure()
@@ -92,7 +95,8 @@ class Plotter:
         # outliers areas and highlight colors
         if ycs is not None:
             outs = [self._outlier_idxs(DATA[i-1], c) for i, c in ycs]
-            hcolors = self._get_colors(len(outs))
+            if hcolors is None:
+                hcolors = self._get_colors(len(outs))
 
         legend_toggles = [show_top_leg, show_bot_leg]
 
@@ -100,7 +104,8 @@ class Plotter:
         for i, X in enumerate(DATA):
             ax = fig.add_subplot(gs[i])
             axes.append(ax)
-            colors = self._get_colors(X.shape[1])
+            if colors is None:
+                colors = self._get_colors(X.shape[1])
             if i == 0:
                 ax.set_title(title, color=self.title_color)
 
@@ -112,9 +117,10 @@ class Plotter:
             if yax_labels[i] is not None:
                 ax.set_ylabel(yax_labels[i], color=self.tick_color)
 
+            lcolors = colors[i]
             for j, col in enumerate(X.columns.values):
                 x = X[col]
-                ax.plot(x.index, x, color=colors[j], label=col,
+                ax.plot(x.index, x, color=lcolors[j], label=col,
                         alpha=self.line_alpha, linewidth=self.line_width)
 
                 ax.xaxis.set_major_locator(LinearLocator(self.xtickcnt))
@@ -181,30 +187,12 @@ class Plotter:
         """
         op, threshold, min_size = constraint
         op = self._get_operator(op)
-        mask = op(X, threshold)
-        return X[mask].dropna()
-        # tmp = mask.copy()
-        # for i in range(min_size):
-        #     mask = mask & tmp.shift(i)
-        # return X[mask]
-
-    def _outlier_area(self, X, constraint):
-        """
-            Finds areas outside given constraints
-
-            params:
-            - X: pd series to compare
-            - constraint: [operator str, threshold val, min size]
-            returns:
-            - mask: bool mask of matching areas
-        """
-        op, threshold, min_size = constraint
         bounds = op(X, threshold)
         mask = bounds
         for i in range(min_size):
             mask = mask & bounds.shift(i)
-
-        return mask
+        mask = mask.fillna(False)
+        return X[mask].dropna()
 
     def _get_colors(self, count, scheme=None):
         if scheme is None:
