@@ -1,11 +1,9 @@
 import datetime as dt
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import marketsimcode as ms
-from matplotlib.ticker import LinearLocator
 from util import get_data
+from Plotter import Plotter
 
 
 class TheoreticallyOptimalStrategy:
@@ -18,7 +16,8 @@ class TheoreticallyOptimalStrategy:
     def cmp_benchmark(self, symbol, sd=dt.datetime(2008, 1, 1),
                       ed=dt.datetime(2009, 12, 31), sv=1e5,
                       bench_quantity=1e3, commission=0.0,
-                      impact=0.0, should_plot=False, labels=None):
+                      impact=0.0, should_plot=False, save_path=None,
+                      labels=None):
         tp_trades = self.testPolicy(symbol=symbol, sd=sd, ed=ed, sv=sv)
         tp = ms.compute_portvals(tp_trades, start_val=sv,
                                  commission=commission, impact=impact)
@@ -34,12 +33,21 @@ class TheoreticallyOptimalStrategy:
         df_cmp.columns = labels
 
         # optionally plot comparison
-        if should_plot:
-            self.plot_strats(df_cmp, labels=labels)
+        if should_plot or save_path is not None:
+            plotter = Plotter()
+            yax_labels = [f'indexed portfolio value', 'alpha']
+            title = f'{symbol} Theoretically Optimal Strategy'
+            colors = [[(0, 1, 0), (1, 0, 0)], [(0.35, 0.35, 0.35)]]
+            df_alpha = pd.DataFrame({'alpha': (tp-bp)/sv})
+            df_cmp['benchmark'] = df_cmp['benchmark']/bp.iloc[0]
+            df_cmp['optimal'] = df_cmp['optimal']/tp.iloc[0]
+            plotter.stacked_plot(df_cmp, df_alpha, yax_labels=yax_labels,
+                                 title=title, colors=colors,
+                                 should_show=should_plot, save_path=save_path)
 
         return df_cmp
 
-    def performance(self, df_strats):
+    def performance(self, df_strats, show_table=False, save_path=None):
         pxchg = df_strats/df_strats.shift(1)-1
         data = {
             'cr': df_strats.iloc[-1]/df_strats.iloc[0]-1,
@@ -47,6 +55,11 @@ class TheoreticallyOptimalStrategy:
             'adr': pxchg.mean(),
         }
         metrics = pd.DataFrame(data)
+        metrics = metrics.round(5)
+
+        if show_table or save_path is not None:
+            plotter = Plotter()
+            plotter.table(metrics, show_table=show_table, save_path=save_path)
         return metrics
 
     def testPolicy(self, symbol='JPM', sd=dt.datetime(2008, 1, 1),
@@ -133,78 +146,6 @@ class TheoreticallyOptimalStrategy:
         vals = vals.rename(symbol)
         return vals
 
-    def plot_strats(self, df_strat, labels=None, idxd=True, ylabel=None,
-                    show_legend=True, colors=None, line_alpha=0.7,
-                    line_width=1.5, line_style='dotted', tc='0.25',
-                    bgc='0.90', fc='0.6'):
-        """
-            params:
-            - df_strat: df with dates and strategy values for each col
-            - labels: list of strategy names; if None defaults to col vals
-            - idxd: boolean toggle for index values based on start
-            - ylabel: y-axis label
-            - show_legend: whether to show data legend
-            - colors: list of line colors
-            - line_alpha: line alpha
-            - line_width: line width
-            - line_style: grid line style
-            - tc: axes tick, axis label, legend color (grayscale)
-            - bgc: background color (grayscale)
-            - fc: frame color (grayscale)
-        """
-        df = df_strat.copy()
-
-        # df strat labels defaults to column values
-        if labels is None:
-            labels = df.columns.values
-
-        # set default colors if none provided
-        if colors is None:
-            colors = ['g', 'r', 'b', 'c', 'm', 'k', 'y']
-
-        # optionally index strategy values
-        if idxd:
-            df = df/df.iloc[0]
-
-        # plot figure with given attributes
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        for i, strat in enumerate(df.columns.values):
-            ax.plot(df.index, df[strat], color=colors[i],
-                    alpha=line_alpha, linewidth=line_width,
-                    label=labels[i])
-
-        # format axes
-        # x-axis date format
-        date_fmt = mdates.DateFormatter('%Y-%m')
-        ax.xaxis.set_major_formatter(date_fmt)
-        # axes tick colors
-        ax.tick_params(colors=tc)
-
-        # restrict gridlines for x-axis
-        ax.grid(linestyle=line_style)
-        ax.xaxis.set_major_locator(LinearLocator(7))
-
-        # optional y-axis label
-        if ylabel:
-            ax.set_ylabel(ylabel, color=tc)
-
-        # format background and frame colors
-        ax.set_facecolor(bgc)
-        plt.setp(ax.spines.values(), color=fc)
-
-        # legend with given attributes
-        if show_legend:
-            leg = ax.legend()
-            for txt in leg.get_texts():
-                txt.set_color(tc)
-
-            for lh in leg.legendHandles:
-                lh.set_alpha(line_alpha)
-
-        plt.show()
-        plt.clf()
-
 
 def author():
     return 'cfleisher3'
@@ -212,6 +153,6 @@ def author():
 
 if __name__ == '__main__':
     opt_strat = TheoreticallyOptimalStrategy()
-    cmps = opt_strat.cmp_benchmark('JPM', should_plot=True)
-    perf_metrics = opt_strat.performance(cmps)
-    print(f'\nstrategy performance metrics\n{perf_metrics}')
+    cmps = opt_strat.cmp_benchmark('JPM', should_plot=False,
+                                   save_path='opt_port_chart.png')
+    opt_strat.performance(cmps, show_table=False, save_path='opt_table.png')

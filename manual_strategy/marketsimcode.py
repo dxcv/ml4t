@@ -88,7 +88,8 @@ def compute_portvals(orders_file="./orders/orders.csv", start_val=1000000,
     # set MV, ShareChg cols; init Commis col
     portvals['MV'] = portvals.Shares*portvals.Price
     portvals['ShareChg'] = portvals.groupby('Symbol')['Shares'].diff()
-    portvals['Commis'] = -portvals.Trades*commission
+    portvals[portvals.ShareChg == 0].Trades = 0
+    portvals['Commis'] = (-portvals.Trades*commission).fillna(0)
 
     # update na in ShareChg col of first row to be Shares
     portvals = portvals.drop(['Symbol'], axis=1)

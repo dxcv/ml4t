@@ -1,10 +1,6 @@
 import os
 import datetime as dt
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from matplotlib.ticker import LinearLocator
-from matplotlib.gridspec import GridSpec
 from util import get_data
 from Plotter import Plotter
 
@@ -100,20 +96,20 @@ def sma(df, n):
     return df.reset_index('Symbol').groupby('Symbol').rolling(n).mean()
 
 
-def pct_vwap(df, window_sizes=[5, 10], standard=True):
-    df_pct_vwap = pd.DataFrame(index=df.index)
+def vwpc(df, window_sizes=[5, 10], standard=True):
+    df_vwpc = pd.DataFrame(index=df.index)
     tmp = pd.DataFrame(df.iloc[:, 0]*df.iloc[:, 1],
                        columns=['weighted'])
     col_names = [df.columns.values[0]]
     for n in window_sizes:
-        pct = tmp/sma(tmp, n)
-        pct.columns = [f'{c}_pct_vwap_{n}' for c in col_names]
-        df_pct_vwap = df_pct_vwap.join(pct)
+        chg = tmp/tmp.shift(n)-1
+        chg.columns = [f'{c}_vwpc_{n}' for c in col_names]
+        df_vwpc = df_vwpc.join(chg)
 
     if standard:
-        df_pct_vwap = (df_pct_vwap-df_pct_vwap.mean())/df_pct_vwap.std()
+        df_vwpc = (df_vwpc-df_vwpc.mean())/df_vwpc.std()
 
-    return df_pct_vwap
+    return df_vwpc
 
 
 def rsi(df, window_sizes=[5, 10], standard=False):
@@ -145,198 +141,12 @@ def rsi(df, window_sizes=[5, 10], standard=False):
     return df_rsi
 
 
-def bollinger_bands(df, ma, n, k):
-    """
-        Bollinger Bands for n window size and k stdevs
-        returns lower, upper bands
-    """
-    groups = df.reset_index('Symbol').groupby('Symbol')
-    std = groups.rolling(n).std()
-    return ma-std*k, ma+std*k
-
-
-def bollinger(df, window_sizes=[5, 10], k=2, mafn=sma, standard=True):
-    """
-        Bollinger Value for n window size and k stdevs
-    """
-    groups = df.reset_index('Symbol').groupby('Symbol')
-    df_bvals = pd.DataFrame(index=df.index)
-    col_names = df.columns.values
-    for n in window_sizes:
-        ma = mafn(df, n)
-        std = groups.rolling(n).std()
-        bval = (df-ma)/(k*std)
-        bval.columns = [f'{c}_bollinger_{n}' for c in col_names]
-        df_bvals = df_bvals.join(bval, how='inner')
-
-    if standard:
-        df_bvals = (df_bvals-df_bvals.mean())/df_bvals.std()
-
-    return df_bvals
-
-
 def author():
     """Required by ml4t rubric: returns gt username"""
     return 'cfleisher3'
 
 
-def plot_standard(X, labels, ylabel, lbound=None, ubound=None,
-                  lbc='g', ubc='r'):
-    fig = plt.figure()
-
-    colors = ['b', 'm', 'k', 'y', 'o']
-    line_alpha = 0.7
-
-    ax1 = fig.add_subplot(111)
-    ax1.grid(linestyle='dotted')
-    for i, x in enumerate(X):
-        ax1.plot(x.index.values, x.values,
-                 color=colors[i], alpha=line_alpha,
-                 linewidth=1.5, label=labels[i])
-
-    # set the number of gridlines for both subplots
-    ax1.xaxis.set_major_locator(LinearLocator(7))
-
-    # format x-axis dates and hide labels for top plot
-    date_fmt = mdates.DateFormatter('%Y-%m')
-    tc = '0.25'
-    ax1.tick_params(axis='y', colors=tc)
-    ax1.xaxis.set_major_formatter(date_fmt)
-
-    # background colors
-    bgc = '0.90'
-    ax1.set_facecolor(bgc)
-
-    # frame colors
-    fc = '0.6'
-    plt.setp(ax1.spines.values(), color=fc)
-
-    # axis labels
-    if ylabel:
-        ax1.set_ylabel(ylabel, color=tc)
-
-    # legend
-    leg1 = ax1.legend()
-    for txt in leg1.get_texts():
-        txt.set_color(tc)
-
-    for lh in leg1.legendHandles:
-        lh.set_alpha(line_alpha)
-
-    # shade boundary regions
-    if ubound is not None:
-        above = get_regions(data[-1], data[-1] > ubound)
-        for r in above:
-            ax1.axvspan(*r, color=ubc, alpha=0.5)
-
-    if lbound is not None:
-        below = get_regions(data[-1], data[-1] < lbound)
-        for r in below:
-            ax1.axvspan(*r, color=lbc, alpha=0.5)
-
-    plt.show()
-    plt.clf()
-
-
-def plot_vertical(X, bdata, labels, ylabel=None, bylabel=None,
-                  lbound=None, ubound=None, bcnt=3, lbc='g', ubc='r'):
-    """
-        data: list of series to plot
-        bdata: series for bottom plot
-        labels: data legend labels
-        ylabel: y-axis label
-        bylabel: bottom y-axis label
-    """
-    fig = plt.figure()
-    gs = GridSpec(2, 1, height_ratios=[2, 1])  # smaller bottom subplot
-    gs.update(hspace=0.025)  # spacing between subplots
-
-    colors = ['b', 'm', 'k', 'y', 'o']
-    line_alpha = 0.7
-
-    ax1 = fig.add_subplot(gs[0])
-    ax1.grid(linestyle='dotted')
-    for i, x in enumerate(X):
-        ax1.plot(x.index.values, x.values,
-                 color=colors[i], alpha=line_alpha,
-                 linewidth=1.5, label=labels[i])
-
-    ax2 = fig.add_subplot(gs[1])
-    ax2.grid(linestyle='dotted')
-    ax2.plot(bdata.index.values, bdata.values,
-             color=colors[len(X)], alpha=line_alpha,
-             linewidth=1.25)
-
-    # set the number of gridlines for both subplots
-    ax1.xaxis.set_major_locator(LinearLocator(7))
-    ax2.xaxis.set_major_locator(LinearLocator(7))
-    ax1.set_xlim(ax2.get_xlim())  # align x-axis of subplots
-
-    # format x-axis dates and hide labels for top plot
-    date_fmt = mdates.DateFormatter('%Y-%m')
-    tc = '0.25'
-    ax1.tick_params(axis='x', which='both', bottom=False,
-                    top=False, labelbottom=False)
-    ax1.tick_params(axis='y', colors=tc)
-    ax2.xaxis.set_major_formatter(date_fmt)
-    ax2.tick_params(colors=tc)
-
-    # background colors
-    bgc = '0.90'
-    ax1.set_facecolor(bgc)
-    ax2.set_facecolor(bgc)
-
-    # frame colors
-    fc = '0.6'
-    plt.setp(ax1.spines.values(), color=fc)
-    plt.setp(ax2.spines.values(), color=fc)
-
-    # axis labels
-    if ylabel:
-        ax1.set_ylabel(ylabel, color=tc)
-    if bylabel:
-        ax2.set_ylabel(bylabel, color=tc)
-
-    # legend
-    leg1 = ax1.legend()
-    for txt in leg1.get_texts():
-        txt.set_color(tc)
-
-    for lh in leg1.legendHandles:
-        lh.set_alpha(line_alpha)
-
-    # shade boundary regions
-    if ubound is not None:
-        print((bdata > ubound).head(50))
-        print(bdata.head(50))
-        above = get_regions(bdata, bdata > ubound, n=bcnt)
-        for r in above:
-            ax1.axvspan(*r, color=ubc, alpha=0.5)
-            ax2.axvspan(*r, color=ubc, alpha=0.5)
-
-    if lbound is not None:
-        below = get_regions(bdata, bdata < lbound, n=bcnt)
-        for r in below:
-            ax1.axvspan(*r, color=lbc, alpha=0.5)
-            ax2.axvspan(*r, color=lbc, alpha=0.5)
-
-    plt.show()
-    plt.clf()
-
-
-def get_regions(data, bounds, n=3):
-    """find regions meeting bounds criteria"""
-    umask = bounds
-    for i in range(n):
-        umask = umask & bounds.shift(i)
-
-    uidxs = umask.index.values
-    uvls = umask.values
-    um = len(uidxs)-1
-    return [[uidxs[i], uidxs[min(um, i+n-1)]] for i, v in enumerate(uvls) if v]
-
-
-def display_sma(df, symbol, metric, ws=10, lbound=-1.5, ubound=1.5):
+def display_sma(df, symbol, metric, ws=10, ycs=None, save_path=None):
     vals = df.loc[symbol, metric]
     df_vals = pd.DataFrame(pd.concat([vals], keys=[symbol],
                                      names=['Symbol']))
@@ -349,36 +159,19 @@ def display_sma(df, symbol, metric, ws=10, lbound=-1.5, ubound=1.5):
     vals = vals/vals[vals.first_valid_index()]
     smas = smas/smas[smas.first_valid_index()]
     x1 = pd.DataFrame({metric: vals, 'sma': smas})
-    x2 = pd.DataFrame({'norm pct sma': psmas})
+    x2 = pd.DataFrame({'standard pct sma': psmas})
 
     plotter = Plotter()
-    ycs = [[2, ['<', -1.5, 4]], [2, ['>', 1.5, 4]]]
-    yax_labels = [f'indexed {metric}, sma', 'norm pct sma']
+    yax_labels = [f'indexed {metric}, sma', 'standard pct sma']
     colors = [[(0.6, 0.13, 0.79), (0.79, 0.5, 0.13)], [(0.35, 0.35, 0.35)]]
     hcolors = [(0, 0, 1), (0, 0, 0)]
     plotter.stacked_plot(x1, x2, yax_labels=yax_labels,
                          title=f'{symbol} {metric} SMA', ycs=ycs,
-                         colors=colors, hcolors=hcolors)
+                         colors=colors, hcolors=hcolors,
+                         save_path=save_path)
 
 
-def display_bollinger(df, symbol, metric, ws=10, k=2, lbound=-1.0, ubound=0.9):
-    vals = df.loc[symbol, metric]
-    df_vals = pd.DataFrame(pd.concat([vals], keys=[symbol],
-                           names=['Symbol']))
-    df_sma = sma(df_vals, ws)
-    df_lband, df_uband = bollinger_bands(df_vals, df_sma, ws, 2)
-    uband = df_uband.loc['JPM', 'AdjClose']
-    lband = df_lband.loc['JPM', 'AdjClose']
-    df_bval = bollinger(df_vals, window_sizes=[ws], standard=False)
-    bvals = df_bval.loc['JPM', f'AdjClose_bollinger_{ws}']
-    band_labels = [metric, 'upper band', 'lower band']
-    bbds = [s/vals[vals.first_valid_index()] for s in [vals, uband, lband]]
-    plot_vertical(bbds, bvals, band_labels,
-                  ylabel=f'indexed {metric}', bylabel='bollinger',
-                  lbound=-1.0, ubound=0.9, bcnt=2, lbc='r', ubc='g')
-
-
-def display_rsi(df, symbol, metric, ws=10, lbound=None, ubound=None):
+def display_rsi(df, symbol, metric, ws=10, ycs=None, save_path=None):
     vals = df.loc[symbol, metric]
     df_vals = pd.DataFrame(pd.concat([vals], keys=[symbol],
                                      names=['Symbol']))
@@ -389,36 +182,35 @@ def display_rsi(df, symbol, metric, ws=10, lbound=None, ubound=None):
     x1 = pd.DataFrame({metric: vals})
     x2 = pd.DataFrame({'rsi': rsivals})
     plotter = Plotter()
-    ycs = [[2, ['<', 0.3, 4]], [2, ['>', 0.7, 4]]]
     colors = [[(0.6, 0.13, 0.79)], [(0.35, 0.35, 0.35)]]
     hcolors = [(0, 0, 1), (0, 0, 0)]
     plotter.stacked_plot(x1, x2, yax_labels=[f'indexed {metric}', 'rsi'],
                          title=f'{symbol} {metric} RSI', ycs=ycs,
-                         colors=colors, hcolors=hcolors)
+                         colors=colors, hcolors=hcolors, save_path=save_path)
 
 
-def display_vwap(df, symbol, metric, ws=10, lbound=-1.0, ubound=1.0):
+def display_vwpc(df, symbol, metric, ws=10, ycs=None, save_path=None):
     vals = df.loc[symbol, metric]
     volvals = df.loc[symbol, 'Volume']
     df_vals = pd.concat([vals, volvals], axis=1,
                         keys=[metric, 'Volume'])
     df_vals['Symbol'] = symbol
     df_vals = df_vals.reset_index().set_index(['Symbol', 'Date'])
-    df_vwap = pct_vwap(df_vals, window_sizes=[ws], standard=True)
-    vwapvals = df_vwap.loc['JPM', f'{metric}_pct_vwap_{ws}']
-    vwapvals = vwapvals/vwapvals[vwapvals.first_valid_index()]
-    volvals = volvals/volvals[volvals.first_valid_index()]
+    df_vwpc = vwpc(df_vals, window_sizes=[ws], standard=False)
+    vwpcvals = df_vwpc.loc['JPM', f'{metric}_vwpc_{ws}']
     vals = vals/vals[vals.first_valid_index()]
-    x1 = pd.DataFrame({metric: vals})
-    x2 = pd.DataFrame({'vwap': vwapvals})
+    weighted = vals*volvals
+    weighted = (weighted-weighted.min())/(weighted.max()-weighted.min())
+    x1 = pd.DataFrame({metric: vals, 'norm vwp': weighted})
+    x2 = pd.DataFrame({'vwpc': vwpcvals})
     plotter = Plotter()
-    ycs = [[2, ['<', -1.5, 1]], [2, ['>', 2.0, 1]]]
-    colors = [[(0.6, 0.13, 0.79)], [(0.35, 0.35, 0.35)]]
+    colors = [[(0.6, 0.13, 0.79), (0.79, 0.5, 0.13)], [(0.35, 0.35, 0.35)]]
     hcolors = [(0, 0, 1), (0, 0, 0)]
-    yax_labels = [f'indexed {metric}. volume', 'norm pct vwap']
+    yax_labels = [f'indexed {metric}, norm vwp', 'vwpc']
     plotter.stacked_plot(x1, x2, yax_labels=yax_labels,
-                         title=f'{symbol} {metric} VWAP', ycs=ycs,
-                         colors=colors, hcolors=hcolors)
+                         title=f'{symbol} {metric} VWPC',
+                         colors=colors, hcolors=hcolors, ycs=ycs,
+                         save_path=save_path)
 
 
 if __name__ == '__main__':
@@ -428,6 +220,17 @@ if __name__ == '__main__':
     dates = pd.date_range(start_date, end_date)
 
     data = ml4t_load_data(universe, dates)
-    display_vwap(data, 'JPM', 'AdjClose')
-    display_sma(data, 'JPM', 'AdjClose')
-    display_rsi(data, 'JPM', 'AdjClose')
+    # sma
+    sma_ycs = [[2, ['<', -1.0, 3]], [2, ['>', 1.0, 3]]]
+    display_sma(data, 'JPM', 'AdjClose', ws=20, ycs=sma_ycs,
+                save_path='sma.png')
+
+    # rsi
+    rsi_ycs = [[2, ['<', 0.2, 1]], [2, ['>', 0.8, 1]]]
+    display_rsi(data, 'JPM', 'AdjClose', ws=5, ycs=rsi_ycs,
+                save_path='rsi.png')
+
+    # vwpc
+    vwpc_ycs = [[2, ['<', -1.5, 1]], [2, ['>', 1.5, 1]]]
+    display_vwpc(data, 'JPM', 'AdjClose', ws=30, ycs=vwpc_ycs,
+                 save_path='vwpc.png')

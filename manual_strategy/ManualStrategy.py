@@ -1,13 +1,10 @@
 import datetime as dt
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import indicators as indi
 import marketsimcode as msim
-from matplotlib.ticker import LinearLocator
-from matplotlib.gridspec import GridSpec
 from util import get_data
+from Plotter import Plotter
 
 
 def author():
@@ -27,20 +24,20 @@ class ManualStrategy:
         dates = pd.date_range(sd, ed)
         df = indi.ml4t_load_data(['JPM'], dates)
         df_pxs = pd.DataFrame(df['AdjClose'])
-        # get volume and px data for vwap
+        # get volume and px data for vwpc
         vals = df.loc[symbol, 'AdjClose']
         volvals = df.loc[symbol, 'Volume']
-        df_vwap = pd.concat([vals, volvals], axis=1,
+        df_vwpc = pd.concat([vals, volvals], axis=1,
                             keys=['AdjClose', 'Volume'])
-        df_vwap['Symbol'] = symbol
-        df_vwap = df_vwap.reset_index().set_index(['Symbol', 'Date'])
+        df_vwpc['Symbol'] = symbol
+        df_vwpc = df_vwpc.reset_index().set_index(['Symbol', 'Date'])
 
         df_metrics = df_pxs.copy()
 
         # get indicators for adj close data
-        ws = [20, 3, 5]
-        data_inputs = [df_pxs, df_pxs, df_vwap]
-        metrics = [indi.pct_sma, indi.rsi, indi.pct_vwap]
+        ws = [20, 5, 30]
+        data_inputs = [df_pxs, df_pxs, df_vwpc]
+        metrics = [indi.pct_sma, indi.rsi, indi.vwpc]
         standards = [True, False, True]
         for i, metric in enumerate(metrics):
             df_tmp = metric(data_inputs[i], window_sizes=[ws[i]],
@@ -55,7 +52,7 @@ class ManualStrategy:
         sma_key = f'AdjClose_pct_sma_{ws[0]}'
         df_feats[sma_key] = 0.0
         sma_bcount = 3
-        sma_bounds = [-1.5, 1.0]
+        sma_bounds = [-1.0, 1.0]
 
         sma_lmask = df_jpm[sma_key] < sma_bounds[0]
         sma_umask = df_jpm[sma_key] > sma_bounds[1]
@@ -65,13 +62,13 @@ class ManualStrategy:
         for i in range(sma_bcount):
             sma_lmask = sma_lmask & tmp_sma_lmask.shift(i)
             sma_umask = sma_umask & tmp_sma_umask.shift(i)
-        df_feats[sma_key][sma_lmask] = -1.0
-        df_feats[sma_key][sma_umask] = 1.0
+        df_feats[sma_key][sma_lmask] = 1.0
+        df_feats[sma_key][sma_umask] = -1.0
 
         rsi_key = f'AdjClose_rsi_{ws[1]}'
         df_feats[rsi_key] = 0.0
-        rsi_bcount = 3
-        rsi_bounds = [0.3, 0.7]
+        rsi_bcount = 1
+        rsi_bounds = [0.2, 0.8]
 
         # adjust rsi scale
         df_jpm[rsi_key] = df_jpm[rsi_key]/100
@@ -86,39 +83,23 @@ class ManualStrategy:
         df_feats[rsi_key][rsi_lmask] = 1.0
         df_feats[rsi_key][rsi_umask] = -1.0
 
-        vwap_key = f'AdjClose_pct_vwap_{ws[2]}'
-        df_feats[vwap_key] = 0.0
-        vwap_bcount = 3
-        vwap_bounds = [-1.0, 1.0]
+        vwpc_key = f'AdjClose_vwpc_{ws[2]}'
+        df_feats[vwpc_key] = 0.0
+        vwpc_bcount = 1
+        vwpc_bounds = [-1.5, 1.5]
 
-        vwap_lmask = df_jpm[vwap_key] < vwap_bounds[0]
-        vwap_umask = df_jpm[vwap_key] > vwap_bounds[1]
-        tmp_vwap_lmask = vwap_lmask.copy()
-        tmp_vwap_umask = vwap_umask.copy()
-        for i in range(vwap_bcount):
-            vwap_lmask = vwap_lmask & tmp_vwap_lmask.shift(i)
-            vwap_umask = vwap_umask & tmp_vwap_umask.shift(i)
-        df_feats[vwap_key][vwap_lmask] = 1.0
-        df_feats[vwap_key][vwap_umask] = -1.0
-
-        if False:
-            bolli_key = f'AdjClose_bollinger_{ws[2]}'
-            df_feats[bolli_key] = 0.0
-            bolli_bcount = 3
-            bolli_bounds = [-1.0, 1.5]
-
-            bolli_lmask = df_jpm[bolli_key] < bolli_bounds[0]
-            bolli_umask = df_jpm[bolli_key] > bolli_bounds[1]
-            tmp_bolli_lmask = bolli_lmask.copy()
-            tmp_bolli_umask = bolli_umask.copy()
-            for i in range(bolli_bcount):
-                bolli_lmask = bolli_lmask & tmp_bolli_lmask.shift(i)
-                bolli_umask = bolli_umask & tmp_bolli_umask.shift(i)
-            df_feats[bolli_key][bolli_lmask] = -1.0
-            df_feats[bolli_key][bolli_umask] = 1.0
+        vwpc_lmask = df_jpm[vwpc_key] < vwpc_bounds[0]
+        vwpc_umask = df_jpm[vwpc_key] > vwpc_bounds[1]
+        tmp_vwpc_lmask = vwpc_lmask.copy()
+        tmp_vwpc_umask = vwpc_umask.copy()
+        for i in range(vwpc_bcount):
+            vwpc_lmask = vwpc_lmask & tmp_vwpc_lmask.shift(i)
+            vwpc_umask = vwpc_umask & tmp_vwpc_umask.shift(i)
+        df_feats[vwpc_key][vwpc_lmask] = 1.0
+        df_feats[vwpc_key][vwpc_umask] = -1.0
 
         # determine trades based on chg in position
-        pos = df_feats.sum(axis=1).rolling(10).sum().clip(-2, 2)
+        pos = df_feats.sum(axis=1).clip(-1, 1)
         pos_chg = (pos-pos.shift(1)).fillna(pos.iloc[0])
         df_trades[symbol] = pos_chg*1e3
         return df_trades
@@ -163,17 +144,17 @@ class ManualStrategy:
 
     def cmp_benchmark(self, symbol, sd=dt.datetime(2008, 1, 1),
                       ed=dt.datetime(2009, 12, 31), sv=1e5,
-                      bench_quantity=1e3, commission=0.0,
-                      impact=0.0, should_plot=False, labels=None):
+                      bench_quantity=1e3, commission=9.95,
+                      impact=0.001, should_plot=False, labels=None,
+                      title=None, save_path=None):
         df_trades = self.testPolicy(symbol=symbol, sd=sd, ed=ed, sv=sv)
         sp = msim.compute_portvals(df_trades, start_val=sv,
                                    commission=commission, impact=impact)
         bp = self.benchmark_policy(symbol, sd=sd, ed=ed, sv=sv,
                                    quantity=bench_quantity,
                                    commission=commission, impact=impact)
-
         if labels is None:
-            labels = ['benchmark', 'strategy']
+            labels = ['benchmark', 'manual']
 
         # combine policies into single dataframe
         df_cmp = pd.concat([bp, sp], axis=1)
@@ -181,117 +162,50 @@ class ManualStrategy:
 
         # optionally plot comparison
         if should_plot:
-            self.plot_strats(df_cmp, labels=labels, trades=df_trades)
+            plotter = Plotter()
+            yax_labels = [f'indexed portfolio value', 'shares']
+            colors = [[(0, 1, 0), (1, 0, 0)], [(0.35, 0.35, 0.35)]]
+            df_pos = df_trades.cumsum()
+            df_cmp['benchmark'] = df_cmp['benchmark']/bp.iloc[0]
+            df_cmp['manual'] = df_cmp['manual']/sp.iloc[0]
+            ycs = [[3, ['>', 0, 1]], [3, ['<', 0, 1]]]
+            hcolors = [(0, 0, 1), (0, 0, 0)]
+            plotter.stacked_plot(df_cmp, df_pos, yax_labels=yax_labels,
+                                 title=title, ycs=ycs, colors=colors,
+                                 hcolors=hcolors, yc_data=df_trades,
+                                 save_path=save_path)
 
         return df_cmp
 
-    def plot_strats(self, df_strat, trades=None, labels=None, idxd=True,
-                    ylabel='indexed mv', show_legend=True, colors=None,
-                    line_alpha=0.7, line_width=1.5, line_style='dotted',
-                    tc='0.25', bgc='0.90', fc='0.6', bylabel='position'):
-        """
-            params:
-            - df_strat: df with dates and strategy values for each col
-            - labels: list of strategy names; if None defaults to col vals
-            - idxd: boolean toggle for index values based on start
-            - ylabel: y-axis label
-            - show_legend: whether to show data legend
-            - colors: list of line colors
-            - line_alpha: line alpha
-            - line_width: line width
-            - line_style: grid line style
-            - tc: axes tick, axis label, legend color (grayscale)
-            - bgc: background color (grayscale)
-            - fc: frame color (grayscale)
-            - trades: pd trades; draw vertical lines for position chgs if given
-        """
-        df = df_strat.copy()
-        df_pos = trades.cumsum()
+    def performance(self, df_strats, show_table=False, save_path=None):
+        pxchg = df_strats/df_strats.shift(1)-1
+        data = {
+            'cr': df_strats.iloc[-1]/df_strats.iloc[0]-1,
+            'std': pxchg.std(),
+            'adr': pxchg.mean(),
+        }
+        metrics = pd.DataFrame(data)
+        metrics = metrics.round(5)
 
-        # df strat labels defaults to column values
-        if labels is None:
-            labels = df.columns.values
-
-        # set default colors if none provided
-        if colors is None:
-            colors = ['g', 'r', 'b', 'c', 'm', 'k', 'y']
-
-        # optionally index strategy values
-        if idxd:
-            df = df/df.iloc[0]
-
-        # plot figure with given attributes
-        fig = plt.figure()
-        gs = GridSpec(2, 1, height_ratios=[2, 1])
-        gs.update(hspace=0.025)
-        ax1 = fig.add_subplot(gs[0])
-        ax1.grid(linestyle=line_style)
-
-        for i, strat in enumerate(df.columns.values):
-            ax1.plot(df.index, df[strat], color=colors[i],
-                     alpha=line_alpha, linewidth=line_width,
-                     label=labels[i])
-
-        ax2 = fig.add_subplot(gs[1])
-        ax2.grid(linestyle=line_style)
-        ax2.plot(df_pos.index, df_pos.values, color='m',
-                 alpha=line_alpha, linewidth=line_width)
-
-        # restrict gridlines for x-axis
-        ax1.xaxis.set_major_locator(LinearLocator(7))
-        ax2.xaxis.set_major_locator(LinearLocator(7))
-        ax1.set_xlim(ax2.get_xlim())  # align x-axis subplots
-
-        # format axes
-        # x-axis date format
-        date_fmt = mdates.DateFormatter('%Y-%m')
-        ax1.tick_params(axis='x', which='both', bottom=False,
-                        top=False, labelbottom=False)
-        ax1.tick_params(axis='y', colors=tc)
-        ax2.xaxis.set_major_formatter(date_fmt)
-        ax2.tick_params(colors=tc)
-
-        # optional y-axis label
-        if ylabel:
-            ax1.set_ylabel(ylabel, color=tc)
-        if bylabel:
-            ax2.set_ylabel(bylabel, color=tc)
-
-        # format background and frame colors
-        ax1.set_facecolor(bgc)
-        ax2.set_facecolor(bgc)
-        plt.setp(ax1.spines.values(), color=fc)
-        plt.setp(ax2.spines.values(), color=fc)
-
-        # legend with given attributes
-        if show_legend:
-            leg = ax1.legend()
-            for txt in leg.get_texts():
-                txt.set_color(tc)
-
-            for lh in leg.legendHandles:
-                lh.set_alpha(line_alpha)
-
-        # draw vertical lines for position changes
-        if trades is not None:
-            strat_col = df.columns.values[-1]
-            bidxs = trades[trades > 0.0].dropna().index
-            byvals = df[df.index.isin(bidxs)][strat_col]
-            sidxs = trades[trades < 0.0].dropna().index
-            syvals = df[df.index.isin(sidxs)][strat_col]
-            line_height = 0.5
-            line_width = 1.25
-            ax1.bar(x=bidxs, height=line_height, width=line_width,
-                    bottom=byvals, color='b', alpha=line_alpha)
-            ax1.bar(x=sidxs, height=line_height, width=line_width,
-                    bottom=syvals-line_height, color='k',
-                    alpha=line_alpha)
-
-        plt.show()
-        plt.clf()
+        if show_table or save_path is not None:
+            plotter = Plotter()
+            plotter.table(metrics, show_table=show_table, save_path=save_path)
+        return metrics
 
 
 if __name__ == '__main__':
     ms = ManualStrategy()
-    ms.cmp_benchmark('JPM', should_plot=True, commission=9.95,
-                     impact=0.001)
+    is_title = f'JPM Manual Strategy (In Sample)'
+    df_in_sample = ms.cmp_benchmark('JPM', should_plot=False, commission=9.95,
+                                    impact=0.001, title=is_title,
+                                    save_path='is_chart.png')
+    ms.performance(df_in_sample, show_table=False,
+                   save_path='in_sample_table.png')
+    os_title = f'JPM Manual Strategy (Out Sample)'
+    df_out_sample = ms.cmp_benchmark('JPM', sd=dt.datetime(2010, 1, 1),
+                                     ed=dt.datetime(2011, 12, 31),
+                                     should_plot=False, commission=9.95,
+                                     impact=0.001, title=os_title,
+                                     save_path='os_chart.png')
+    ms.performance(df_out_sample, show_table=False,
+                   save_path='out_sample_table.png')

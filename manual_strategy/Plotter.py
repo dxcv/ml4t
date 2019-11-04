@@ -15,7 +15,7 @@ class Plotter:
     def __init__(self, stacked_hratios=[2, 1], line_alpha=0.7, line_width=1.2,
                  grid_style='dotted', xtickcnt=7, date_fmt='%Y-%m',
                  tick_color='0.25', bgc='0.90', fc='0.60',
-                 highlight_alpha=0.4, title_color='0.15', num_fmt='{x:,.1f}'):
+                 highlight_alpha=0.4, title_color='0.15', num_fmt='{x:,.2f}'):
         """
         params:
         - stacked_hratios: height ratios of stacked plots
@@ -59,10 +59,32 @@ class Plotter:
     def author(self):
         return 'cfleisher3'
 
+    def table(self, df, show_table=False, save_path=None):
+        plt.figure(figsize=(6, 1))
+
+        # hide axes
+        # fig.patch.set_visible(False)
+        plt.axis('off')
+        plt.grid('off')
+
+        # generate table
+        plt.table(cellText=df.values, colLabels=df.columns, loc='center',
+                  rowLabels=df.index.values, rowLoc='left', cellLoc='center')
+        # fig.tight_layout()
+
+        # display and save table
+        if save_path is not None:
+            plt.savefig(save_path, bbox_inches='tight')
+
+        if show_table:
+            plt.show()
+
+        plt.clf()
+
     def stacked_plot(self, X1, X2, x1_labels=None, x2_labels=None,
                      yax_labels=None, show_top_leg=True, show_bot_leg=False,
-                     ycs=None, save_path=None, should_show=True, title=None,
-                     colors=None, hcolors=None):
+                     ycs=None, save_path=None, should_show=False, title=None,
+                     colors=None, hcolors=None, yc_data=None):
         """
             X1: pd df with each column a line for top plot
             X2: pd df with each column a line for bottom plot
@@ -94,7 +116,10 @@ class Plotter:
 
         # outliers areas and highlight colors
         if ycs is not None:
-            outs = [self._outlier_idxs(DATA[i-1], c) for i, c in ycs]
+            YC_DATA = [X1, X2]
+            if yc_data is not None:
+                YC_DATA.append(yc_data)
+            outs = [self._outlier_idxs(YC_DATA[i-1], c) for i, c in ycs]
             if hcolors is None:
                 hcolors = self._get_colors(len(outs))
 
@@ -168,7 +193,7 @@ class Plotter:
 
         # storage and display
         if save_path is not None:
-            plt.save_fig(save_path)
+            plt.savefig(save_path, bbox_inches='tight')
 
         if should_show:
             plt.show()
