@@ -19,40 +19,95 @@ Student Name: Tucker Balch (replace with your name)
 GT User ID: tb34 (replace with your User ID)
 GT ID: 900897987 (replace with your GT ID)
 """
-# import numpy as np
+import numpy as np
 import random as rand
 
 
 class QLearner(object):
     def __init__(self, num_states=100, num_actions=4, alpha=0.2,
                  gamma=0.9, rar=0.5, radr=0.99, dyna=0, verbose=False):
-        self.verbose = verbose
+        """
+        Initializes Q table for given number of states and actions to zeros.
+        Stores given params for QLearner instance.
+
+        params:
+        - num_states: number of states to consider (int)
+        - num_actions: number of actions available (int)
+        - alpha: learning rate [0, 1] (float)
+        - gamma: discount rate [0, 1] (float)
+        - rar: random action rate probability [0, 1] (float)
+        - radr: random action decay rate after each update (float)
+        - dyna: dyna updates for each regular update (int)
+        - verbose: print debugging statements (bool)
+        """
+        self.Q = np.zeros((num_states, num_actions))
         self.num_actions = num_actions
         self.s = 0
         self.a = 0
+        self.alpha = alpha
+        self.gamma = gamma
+        self.rar = rar
+        self.radr = radr
+        self.dyna = dyna
+        self.verbose = verbose
 
     def querysetstate(self, s):
         """
-        @summary: Update the state without updating the Q-table
-        @param s: The new state
-        @returns: The selected action
+        Used for setting the initial state and using a learned policy.
+
+        Sets state returning either random or optimal policy action. Neither
+        the Q table nor the random action rate are updated.
+
+        params:
+        - s: new state under consideration (int)
+
+        returns:
+        - a: random or optimal policy action for given state s
         """
         self.s = s
-        action = rand.randint(0, self.num_actions-1)
+
+        if rand.random() > self.rar:
+            action = self.Q[s].argmax()
+        else:
+            action = rand.randint(0, self.num_actions-1)
+
         if self.verbose:
             print(f"s = {s}, a = {action}")
+
         return action
 
     def query(self, s_prime, r):
         """
-        @summary: Update the Q table and return an action
-        @param s_prime: The new state
-        @param r: The ne state
-        @returns: The selected action
+        Used for learning policy.
+
+        Gets either optimal policy or random action. Updates Q table and tracks
+        step by storing new state, action, and updating random action rate.
+
+        params:
+        - s_prime: new state (int)
+        - r: reward for taking action at last state (float)
+
+        returns:
+        - a_prime: optimal policy action
         """
-        action = rand.randint(0, self.num_actions-1)
+        if rand.random() > self.rar:
+            action = self.Q[s_prime].argmax()
+        else:
+            action = rand.randint(0, self.num_actions-1)
+
+        # Q[s,a] = (1-alpha)Q[s,a]+alpha(r+gammaQ[s_prime, a_prime])
+        npv = r + self.gamma*self.Q[s_prime, action]
+        self.Q[self.s, self.a] *= (1-self.alpha)*self.Q[self.s, self.a]
+        self.Q[self.s, self.a] += self.alpha*npv
+
+        # reflect step
+        self.s = s_prime
+        self.a = action
+        self.rar *= self.radr
+
         if self.verbose:
             print(f"s = {s_prime}, a = {action}, r={r}")
+
         return action
 
 
