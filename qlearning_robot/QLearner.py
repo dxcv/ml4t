@@ -51,6 +51,9 @@ class QLearner(object):
         self.dyna = dyna
         self.verbose = verbose
 
+    def author(self):
+        return 'cfleisher3'
+
     def querysetstate(self, s):
         """
         Used for setting the initial state and using a learned policy.
@@ -65,7 +68,6 @@ class QLearner(object):
         - a: random or optimal policy action for given state s
         """
         self.s = s
-
         if rand.random() > self.rar:
             action = self.Q[s].argmax()
         else:
@@ -112,4 +114,9 @@ class QLearner(object):
 
 
 if __name__ == "__main__":
-    print("Remember Q from Star Trek? Well, this isn't him")
+    ql = QLearner(verbose=True)
+    s = 99
+    a = ql.querysetstate(s)
+    s_prime = 5
+    r = 0
+    ql.query(s_prime, r)
