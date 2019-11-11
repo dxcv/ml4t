@@ -16,9 +16,9 @@ as potential employers. However, sharing with other current or future
 students of CS 7646 is prohibited and subject to being investigated as a
 GT honor code violation.
 -----do not edit anything above this line---
-Student Name: Tucker Balch (replace with your name)
-GT User ID: tb34 (replace with your User ID)
-GT ID: 900897987 (replace with your GT ID)
+Student Name: Christopher Fleisher
+GT User ID: cfleisher3
+GT ID: 903421975
 """
 import numpy as np
 import random as rand
@@ -170,7 +170,7 @@ def test_code():
     inf = open(filename)
     lines = inf.readlines()
     data = np.array([list(map(float, s.strip().split(','))) for s in lines])
-    originalmap = data.copy()  # make copy so can revert to original map later
+    # originalmap = data.copy()  # make copy to revert to original later
     if verbose:
         printmap(data)
 
@@ -186,19 +186,19 @@ def test_code():
     print()
     non_dyna_score = total_reward
     # run dyna test
-    learner = ql.QLearner(num_states=100, num_actions=4, alpha=0.2,
-                          gamma=0.9, rar=0.5, radr=0.99, dyna=200,
-                          verbose=False)
-    epochs = 50
-    data = originalmap.copy()
-    total_reward = test(data, epochs, learner, verbose)
-    print(f"{epochs}, median total_reward {total_reward}")
-    dyna_score = total_reward
-    print()
-    print()
+    # learner = ql.QLearner(num_states=100, num_actions=4, alpha=0.2,
+    #                       gamma=0.9, rar=0.5, radr=0.99, dyna=200,
+    #                       verbose=False)
+    # epochs = 50
+    # data = originalmap.copy()
+    # total_reward = test(data, epochs, learner, verbose)
+    # print(f"{epochs}, median total_reward {total_reward}")
+    # dyna_score = total_reward
+    # print()
+    # print()
     print(f"results for {filename}")
     print(f"non_dyna_score: {non_dyna_score}")
-    print(f"dyna_score    : {dyna_score}")
+    # print(f"dyna_score    : {dyna_score}")
 
 
 if __name__ == "__main__":

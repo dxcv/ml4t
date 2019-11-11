@@ -15,9 +15,9 @@ as potential employers. However, sharing with other current or future
 students of CS 7646 is prohibited and subject to being investigated as a
 GT honor code violation.
 -----do not edit anything above this line---
-Student Name: Tucker Balch (replace with your name)
-GT User ID: tb34 (replace with your User ID)
-GT ID: 900897987 (replace with your GT ID)
+Student Name: Christopher Fleisher
+GT User ID: cfleisher3
+GT ID: 903421975
 """
 import numpy as np
 import random as rand
@@ -93,14 +93,14 @@ class QLearner(object):
         - a_prime: optimal policy action
         """
         if rand.random() > self.rar:
-            action = self.Q[s_prime].argmax()
+            action = self.Q[self.s].argmax()
         else:
             action = rand.randint(0, self.num_actions-1)
 
         # Q[s,a] = (1-alpha)Q[s,a]+alpha(r+gammaQ[s_prime, a_prime])
-        npv = r + self.gamma*self.Q[s_prime, action]
-        self.Q[self.s, self.a] *= (1-self.alpha)*self.Q[self.s, self.a]
-        self.Q[self.s, self.a] += self.alpha*npv
+        a_prime = self.Q[s_prime].argmax()
+        self.Q[self.s, action] = (1-self.alpha)*self.Q[self.s, action] + \
+            self.alpha*(r+self.gamma*self.Q[s_prime, a_prime])
 
         # reflect step
         self.s = s_prime
@@ -108,7 +108,7 @@ class QLearner(object):
         self.rar *= self.radr
 
         if self.verbose:
-            print(f"s = {s_prime}, a = {action}, r={r}")
+            print(f"s = {s_prime}, a = {self.a}, r={r}")
 
         return action
 
