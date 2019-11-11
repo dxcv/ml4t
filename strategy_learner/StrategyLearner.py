@@ -21,15 +21,36 @@ GT ID: 903421975
 """
 import datetime as dt
 import pandas as pd
+import numpy as np
 import util as ut
 import indicators as indi
+from QLearner import QLearner
 # import random
 
 
-class StrategyLearner(object):
-    def __init__(self, verbose=False, impact=0.0):
-        self.verbose = verbose
+class StrategyLearner(QLearner):
+    def __init__(self, epochs=500, impact=0.001, positions=[-1, 0, 1],
+                 bincnt=4, indicators='all', alpha=0.2, gamma=0.9,
+                 rar=0.5, radr=0.99, dyna=0, verbose=False):
+        self.epochs = epochs
         self.impact = impact
+        self.positions = np.array(positions)
+        pos_rng = self.positions.max()-self.positions.min()
+        self.actions = np.arange(-pos_rng, pos_rng+1)
+        self.bincnt = bincnt
+        if indicators == 'all':
+            self.indicators = [indi.pct_sma, indi.rsi, indi.vwpc]
+        elif isinstance(indicators, list):
+            self.indicators = indicators[:]
+        else:
+            raise ValueError(f'indicators param must be list or \'all\'')
+
+        # state space: bins*indicators*positions
+        num_states = len(self.indicators)*self.bincnt*self.positions.shape[0]
+        super().__init__(num_states=num_states,
+                         num_actions=self.actions.shape[0],
+                         alpha=alpha, gamma=gamma, rar=rar, radr=radr,
+                         dyna=dyna, verbose=verbose)
 
     def author(self):
         return 'cfleisher'
@@ -37,7 +58,7 @@ class StrategyLearner(object):
     def addEvidence(self, symbol="JPM", sd=dt.datetime(2008, 1, 1),
                     ed=dt.datetime(2009, 12, 31), sv=1e5):
         """
-        Creates and trains a QLearner for trading
+        Trains QLearner
         """
         # load data
         syms = [symbol]
@@ -47,22 +68,56 @@ class StrategyLearner(object):
         df_met = df_pxs.copy()
 
         # generate indicators
-        metrics = [indi.pct_sma, indi.rsi, indi.vwpc]
         data_inputs = [df_pxs, df_pxs, df.loc[:, ['AdjClose', 'Volume']]]
         standards = [True, False, True]
         ws = [[20], [5], [30]]
-        for m, d, s, w in zip(metrics, data_inputs, standards, ws):
-            df_met = df_met.join(m(d, window_sizes=w, standard=s), how='inner')
+        for i, d, s, w in zip(self.indicators, data_inputs, standards, ws):
+            df_met = df_met.join(i(d, window_sizes=w, standard=s), how='inner')
 
         # discretize indicators
-        bincnt = 4
+        df_met = df_met.loc[symbol].drop(['AdjClose'], axis=1).dropna()
         df_bins = df_met.copy()
         for c in df_met.columns.values:
-            df_bins[c] = pd.cut(df_met[c], bincnt, labels=False)
+            df_bins[c] = pd.cut(df_met[c], self.bincnt, labels=False)
 
         if self.verbose:
-            print(f'metrics:\n{df_met.head(35)}')
-            print(f'bins:\n{df_bins.head(35)}')
+            print(f'metrics:\n{df_met.head()}')
+            print(f'bins:\n{df_bins.head()}')
+
+        # train qlearner
+        pos_col = np.zeros((df_bins.shape[0], 1))
+        scores = np.zeros((self.epochs, 1))
+        pxchgs = df.loc[symbol, 'AdjClose']
+        pxchgs = (pxchgs.shift(1)/pxchgs-1).dropna().values
+        goal_reward = 0.05
+        max_iters = 1e3
+        sdi = np.arange(0, (len(self.indicators)+1)*self.bincnt, self.bincnt)
+        for epoch in range(1, self.epochs+1):
+            total_reward = 0
+            # state_data = np.concatenate((df_bins.values, pos_col), axis=1)
+            sd = np.concatenate((df_bins.values, pos_col), axis=1)
+            sd += sdi
+            count = 0
+            while True:
+                if total_reward > goal_reward or count > max_iters:
+                    break
+                s = sd[0]
+                a = self.actions[self.querysetstate(s.sum())]
+                for i, sp in enumerate(sd[1:]):
+                    # update state position for action
+                    sp[-1] = s[-1]+a*sdi[-1]
+                    # get reward for prior state
+                    r = pxchgs[i]*s[-1]
+                    # get next a, roll state fwd; increment r
+                    a = self.query(s.sum(), r)
+                    s = sp
+                    total_reward += r
+                count += 1
+
+            scores[epoch-1] = total_reward
+            if self.verbose:
+                print(f'epoch: {epoch} reward: {total_reward} count: {count}')
+        return np.median(scores)
 
     def testPolicy(self, symbol="JPM", sd=dt.datetime(2008, 1, 1),
                    ed=dt.datetime(2009, 12, 31), sv=1e5):
@@ -93,3 +148,6 @@ class StrategyLearner(object):
 
 if __name__ == "__main__":
     print("One does not simply think up a strategy")
+    slearner = StrategyLearner(verbose=True)
+    result = slearner.addEvidence()
+    print(f'median score: {result}')
