@@ -22,6 +22,7 @@ GT ID: 903421975
 import datetime as dt
 import pandas as pd
 import util as ut
+import indicators as indi
 # import random
 
 
@@ -33,29 +34,38 @@ class StrategyLearner(object):
     def author(self):
         return 'cfleisher'
 
-    def addEvidence(self, symbol="IBM", sd=dt.datetime(2008, 1, 1),
-                    ed=dt.datetime(2009, 1, 1), sv=10000):
+    def addEvidence(self, symbol="JPM", sd=dt.datetime(2008, 1, 1),
+                    ed=dt.datetime(2009, 12, 31), sv=1e5):
         """
         Creates and trains a QLearner for trading
         """
-        # add your code to do learning here
-        # example usage of the old backward compatible util function
+        # load data
         syms = [symbol]
         dates = pd.date_range(sd, ed)
-        prices_all = ut.get_data(syms, dates)  # automatically adds SPY
-        prices = prices_all[syms]  # only portfolio symbols
-        # prices_SPY = prices_all['SPY']  # only SPY, for comparison later
-        if self.verbose:
-            print(prices)
-        # example use with new colname; auto add SPY
-        # volume_all = ut.get_data(syms, dates, colname="Volume")
-        # volume = volume_all[syms]  # only portfolio symbols
-        # volume_SPY = volume_all['SPY']  # only SPY, for comparison later
-        # if self.verbose:
-        #     print(volume)
+        df = indi.ml4t_load_data(syms, dates)
+        df_pxs = pd.DataFrame(df.AdjClose)
+        df_met = df_pxs.copy()
 
-    def testPolicy(self, symbol="IBM", sd=dt.datetime(2009, 1, 1),
-                   ed=dt.datetime(2010, 1, 1), sv=10000):
+        # generate indicators
+        metrics = [indi.pct_sma, indi.rsi, indi.vwpc]
+        data_inputs = [df_pxs, df_pxs, df.loc[:, ['AdjClose', 'Volume']]]
+        standards = [True, False, True]
+        ws = [[20], [5], [30]]
+        for m, d, s, w in zip(metrics, data_inputs, standards, ws):
+            df_met = df_met.join(m(d, window_sizes=w, standard=s), how='inner')
+
+        # discretize indicators
+        bincnt = 4
+        df_bins = df_met.copy()
+        for c in df_met.columns.values:
+            df_bins[c] = pd.cut(df_met[c], bincnt, labels=False)
+
+        if self.verbose:
+            print(f'metrics:\n{df_met.head(35)}')
+            print(f'bins:\n{df_bins.head(35)}')
+
+    def testPolicy(self, symbol="JPM", sd=dt.datetime(2008, 1, 1),
+                   ed=dt.datetime(2009, 12, 31), sv=1e5):
         """
         Tests existing policy against new data
         """
