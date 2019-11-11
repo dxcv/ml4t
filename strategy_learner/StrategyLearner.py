@@ -15,9 +15,9 @@ as potential employers. However, sharing with other current or future
 students of CS 7646 is prohibited and subject to being investigated as a
 GT honor code violation.
 -----do not edit anything above this line---
-Student Name: Tucker Balch (replace with your name)
-GT User ID: tb34 (replace with your User ID)
-GT ID: 900897987 (replace with your GT ID)
+Student Name: Christopher Fleisher
+GT User ID: cfleisher3
+GT ID: 903421975
 """
 import datetime as dt
 import pandas as pd
@@ -30,9 +30,14 @@ class StrategyLearner(object):
         self.verbose = verbose
         self.impact = impact
 
-    # this method should create a QLearner, and train it for trading
+    def author(self):
+        return 'cfleisher'
+
     def addEvidence(self, symbol="IBM", sd=dt.datetime(2008, 1, 1),
                     ed=dt.datetime(2009, 1, 1), sv=10000):
+        """
+        Creates and trains a QLearner for trading
+        """
         # add your code to do learning here
         # example usage of the old backward compatible util function
         syms = [symbol]
@@ -43,15 +48,17 @@ class StrategyLearner(object):
         if self.verbose:
             print(prices)
         # example use with new colname; auto add SPY
-        volume_all = ut.get_data(syms, dates, colname="Volume")
-        volume = volume_all[syms]  # only portfolio symbols
+        # volume_all = ut.get_data(syms, dates, colname="Volume")
+        # volume = volume_all[syms]  # only portfolio symbols
         # volume_SPY = volume_all['SPY']  # only SPY, for comparison later
-        if self.verbose:
-            print(volume)
+        # if self.verbose:
+        #     print(volume)
 
-    # this method should use the existing policy and test it against new data
     def testPolicy(self, symbol="IBM", sd=dt.datetime(2009, 1, 1),
                    ed=dt.datetime(2010, 1, 1), sv=10000):
+        """
+        Tests existing policy against new data
+        """
         # here we build a fake set of trades
         # your code should return the same sort of data
         dates = pd.date_range(sd, ed)
