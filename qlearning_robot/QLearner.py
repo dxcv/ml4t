@@ -92,18 +92,16 @@ class QLearner(object):
             self.T[s, a, s_prime] = t
             self.R[s, a] = (1-self.alpha)*self.R[s, a] + self.alpha*r
             n = self.dyna
+            obs = np.argwhere(self.T > 0)
             while True:
                 if n == 0:
                     break
-                s_ridx = rand.randint(0, self.num_states-1)
-                a_ridx = rand.randint(0, self.num_actions-1)
-                s_pdyn = self.T[s_ridx, a_ridx, :].argmax()
+                # only get prior observations
+                s_ridx, a_ridx, _ = obs[rand.randint(0, obs.shape[0]-1)]
                 r_dyn = self.R[s_ridx, a_ridx]
-                if rand.random() > self.rar:
-                    a_pdyn = self.Q[s_pdyn].argmax()
-                else:
-                    a_pdyn = rand.randint(0, self.num_actions-1)
+                s_pdyn = self.T[s_ridx, a_ridx, :].argmax()
 
+                a_pdyn = self.Q[s_pdyn].argmax()
                 self.Q[s_ridx, a_ridx] = (1-self.alpha)*self.Q[s_ridx, a_ridx]\
                     + self.alpha*(r_dyn+self.gamma*self.Q[s_pdyn, a_pdyn])
                 n -= 1
