@@ -41,7 +41,13 @@ class QLearner(object):
         - verbose: print debugging statements (bool)
         """
         self.Q = np.zeros((num_states, num_actions))
+        self.T = np.zeros((num_states, num_actions, num_states))
+        tclr = 0.00001
+        self.tclr = tclr
+        self.Tc = np.full((num_states, num_actions, num_states), tclr)
+        self.R = np.zeros((num_states, num_actions))
         self.num_actions = num_actions
+        self.num_states = num_states
         self.s = 0
         self.a = 0
         self.alpha = alpha
@@ -55,52 +61,52 @@ class QLearner(object):
         return 'cfleisher3'
 
     def querysetstate(self, s):
-        """
-        Used for setting the initial state and using a learned policy.
-
-        Sets state returning either random or optimal policy action. Neither
-        the Q table nor the random action rate are updated.
-
-        params:
-        - s: new state under consideration (int)
-
-        returns:
-        - a: random or optimal policy action for given state s
-        """
         self.s = s
         if rand.random() > self.rar:
             action = self.Q[s].argmax()
         else:
             action = rand.randint(0, self.num_actions-1)
 
+        self.a = action
+
         if self.verbose:
-            print(f"s = {s}, a = {action}")
+            print(f's = {s}, a = {action}')
 
         return action
 
     def query(self, s_prime, r):
-        """
-        Used for learning policy.
-
-        Gets either optimal policy or random action. Updates Q table and tracks
-        step by storing new state, action, and updating random action rate.
-
-        params:
-        - s_prime: new state (int)
-        - r: reward for taking action at last state (float)
-
-        returns:
-        - a_prime: optimal policy action
-        """
         if rand.random() > self.rar:
-            action = self.Q[self.s].argmax()
+            action = self.Q[s_prime].argmax()
         else:
             action = rand.randint(0, self.num_actions-1)
 
         # Q[s,a] = (1-alpha)Q[s,a]+alpha(r+gammaQ[s_prime, a_prime])
-        a_prime = self.Q[s_prime].argmax()
-        self.Q[self.s, action] = (1-self.alpha)*self.Q[self.s, action] + \
-            self.alpha*(r+self.gamma*self.Q[s_prime, a_prime])
+        self.Q[self.s, self.a] = (1-self.alpha)*self.Q[self.s, self.a] + \
+            self.alpha*(r+self.gamma*self.Q[s_prime, action])
+
+        if self.dyna > 0:
+            s = self.s
+            a = self.a
+            self.Tc[s, a, s_prime] += self.tclr
+            t = self.Tc[s, a, s_prime]/self.Tc[s, a, :].sum()
+            self.T[s, a, s_prime] = t
+            self.R[s, a] = (1-self.alpha)*self.R[s, a] + self.alpha*r
+            n = self.dyna
+            while True:
+                if n == 0:
+                    break
+                s_ridx = rand.randint(0, self.num_states-1)
+                a_ridx = rand.randint(0, self.num_actions-1)
+                s_pdyn = self.T[s_ridx, a_ridx, :].argmax()
+                r_dyn = self.R[s_ridx, a_ridx]
+                if rand.random() > self.rar:
+                    a_pdyn = self.Q[s_pdyn].argmax()
+                else:
+                    a_pdyn = rand.randint(0, self.num_actions-1)
+
+                self.Q[s_ridx, a_ridx] = (1-self.alpha)*self.Q[s_ridx, a_ridx]\
+                    + self.alpha*(r_dyn+self.gamma*self.Q[s_pdyn, a_pdyn])
+                n -= 1
 
         # reflect step
         self.s = s_prime
@@ -108,15 +114,10 @@ class QLearner(object):
         self.rar *= self.radr
 
         if self.verbose:
-            print(f"s = {s_prime}, a = {self.a}, r={r}")
+            print(f's = {s_prime}, a = {action}, r={r}')
 
         return action
 
 
 if __name__ == "__main__":
-    ql = QLearner(verbose=True)
-    s = 99
-    a = ql.querysetstate(s)
-    s_prime = 5
-    r = 0
-    ql.query(s_prime, r)
+    print('qlearner main...')

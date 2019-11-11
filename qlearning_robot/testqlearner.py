@@ -165,12 +165,12 @@ def test(map, epochs, learner, verbose):
 
 # run the code to test a learner
 def test_code():
-    verbose = True
+    verbose = False
     filename = 'testworlds/world01.csv'
     inf = open(filename)
     lines = inf.readlines()
     data = np.array([list(map(float, s.strip().split(','))) for s in lines])
-    # originalmap = data.copy()  # make copy to revert to original later
+    originalmap = data.copy()  # make copy to revert to original later
     if verbose:
         printmap(data)
 
@@ -186,19 +186,19 @@ def test_code():
     print()
     non_dyna_score = total_reward
     # run dyna test
-    # learner = ql.QLearner(num_states=100, num_actions=4, alpha=0.2,
-    #                       gamma=0.9, rar=0.5, radr=0.99, dyna=200,
-    #                       verbose=False)
-    # epochs = 50
-    # data = originalmap.copy()
-    # total_reward = test(data, epochs, learner, verbose)
-    # print(f"{epochs}, median total_reward {total_reward}")
-    # dyna_score = total_reward
-    # print()
-    # print()
+    learner = ql.QLearner(num_states=100, num_actions=4, alpha=0.2,
+                          gamma=0.9, rar=0.5, radr=0.99, dyna=200,
+                          verbose=False)
+    epochs = 50
+    data = originalmap.copy()
+    total_reward = test(data, epochs, learner, verbose)
+    print(f"{epochs}, median total_reward {total_reward}")
+    dyna_score = total_reward
+    print()
+    print()
     print(f"results for {filename}")
     print(f"non_dyna_score: {non_dyna_score}")
-    # print(f"dyna_score    : {dyna_score}")
+    print(f"dyna_score    : {dyna_score}")
 
 
 if __name__ == "__main__":
