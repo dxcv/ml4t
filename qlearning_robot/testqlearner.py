@@ -146,9 +146,9 @@ def test(map, epochs, learner, verbose):
             state = discretize(newpos)
             action = learner.query(state, r)
             if data[robopos] != 6:
-                data[robopos] = 4  # mark where we've been for map printing
+                data[robopos] = 4  # mark for printing if not quicksand
             if data[newpos] != 6:
-                data[newpos] = 2  # move to new location
+                data[newpos] = 2  # move to new location if not quicksand
             robopos = newpos  # update the location
             # if verbose: time.sleep(1)
             total_reward += stepreward
