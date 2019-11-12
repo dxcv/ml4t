@@ -31,7 +31,7 @@ from QLearner import QLearner
 class StrategyLearner(QLearner):
     def __init__(self, epochs=500, impact=0.001, positions=[-1, 0, 1],
                  bincnt=4, indicators='all', alpha=0.2, gamma=0.9,
-                 rar=0.5, radr=0.99, dyna=0, verbose=False):
+                 rar=0.5, radr=0.99, dyna=200, verbose=False):
         self.epochs = epochs
         self.impact = impact
         self.positions = np.array(positions)
@@ -80,60 +80,48 @@ class StrategyLearner(QLearner):
         for c in df_met.columns.values:
             df_bins[c] = pd.cut(df_met[c], self.bincnt, labels=False)
 
-        if self.verbose:
-            print(f'metrics:\n{df_met.head()}')
-            print(f'bins:\n{df_bins.head()}')
-
         # train qlearner
         pos_col = np.ones((df_bins.shape[0], 1))
         scores = np.zeros((self.epochs, 1))
-        n = 1
         pxchgs = df.loc[symbol, 'AdjClose']
-        pxchgs = (pxchgs/pxchgs.shift(n)-1).dropna().values
-        goal_reward = 2.5
-        cash_reward = -0.001
-        max_iters = 1e3
+        pxchgs = (pxchgs/pxchgs.shift(1)-1).dropna().values
+        cash_reward = 0.0
         sdi = np.arange(0, (len(self.indicators)+1)*self.bincnt, self.bincnt)
         pfloor = self.positions.min()
         pceil = self.positions.max()
         rar = self.rar
+        converge = 0.05
         for epoch in range(1, self.epochs+1):
-            # total_reward = 0
+            self.rar = rar
             sd = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
             sd += sdi
-            count = 0
-            rewards = np.zeros((sd.shape[0],))
-            actions = np.full((sd.shape[0],), -1)
-            while True:
-                self.rar = rar
-                rewards[:] = 0
-                actions[:] = -1
-                s = sd[0]
-                a = self.actions[self.querysetstate(s.sum())]
-                actions[0] = a
-                for i, sp in enumerate(sd[1:]):
-                    # update state position for action
-                    prior_pos = int(s[-1]-sdi[-1]-1)
-                    pos = np.clip(prior_pos+a, pfloor, pceil)
-                    sp[-1] = pos+sdi[-1]+1
-                    # get reward for prior state
-                    if prior_pos == 0:
-                        r = cash_reward
-                    else:
-                        r = pxchgs[i]*prior_pos
-                    # get next a, roll state fwd; increment r
-                    actions[i] = a
-                    rewards[i] = r
-                    a = self.actions[self.query(s.sum(), r)]
-                    s = sp
+            s = sd[0]
+            a = self.actions[self.querysetstate(s.sum())]
+            rewards = np.zeros((pxchgs.shape[0],))
+            # [TBU: shuffle indices]
+            for i, sp in enumerate(sd[1:]):
+                # update state position for action
+                prior_pos = int(s[-1]-sdi[-1]-1)
+                pos = np.clip(prior_pos+a, pfloor, pceil)
+                sp[-1] = pos+sdi[-1]+1
+                # get reward for prior state
+                if prior_pos == 0:
+                    r = cash_reward
+                else:
+                    r = pxchgs[i]*prior_pos
+                # get next a, roll state fwd; increment r
+                rewards[i] = r
+                a = self.actions[self.query(s.sum(), r)]
+                s = sp
 
-                count += 1
-                if rewards.sum() > goal_reward or count > max_iters:
-                    scores[epoch-1] = rewards.sum()
+            scores[epoch-1] = ((pxchgs-rewards)**2).mean()**0.5
+            print(f'epoch: {epoch} score: {scores[epoch-1]}')
+            if epoch >= 10:
+                rmseschg = np.abs(scores[epoch-1]/scores[:epoch-2].mean()-1)
+                if rmseschg < converge:
                     break
-            # if self.verbose:
-            print(f'epoch: {epoch} reward: {rewards.sum()} count: {count}')
-        return np.median(scores)
+
+        return scores
 
     def testPolicy(self, symbol="JPM", sd=dt.datetime(2008, 1, 1),
                    ed=dt.datetime(2009, 12, 31), sv=1e5):
@@ -165,5 +153,4 @@ class StrategyLearner(QLearner):
 if __name__ == "__main__":
     print("One does not simply think up a strategy")
     slearner = StrategyLearner(verbose=False)
-    result = slearner.addEvidence()
-    print(f'median score: {result}')
+    slearner.addEvidence()
