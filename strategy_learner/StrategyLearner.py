@@ -85,38 +85,54 @@ class StrategyLearner(QLearner):
             print(f'bins:\n{df_bins.head()}')
 
         # train qlearner
-        pos_col = np.zeros((df_bins.shape[0], 1))
+        pos_col = np.ones((df_bins.shape[0], 1))
         scores = np.zeros((self.epochs, 1))
+        n = 1
         pxchgs = df.loc[symbol, 'AdjClose']
-        pxchgs = (pxchgs.shift(1)/pxchgs-1).dropna().values
-        goal_reward = 0.05
+        pxchgs = (pxchgs/pxchgs.shift(n)-1).dropna().values
+        goal_reward = 2.5
+        cash_reward = -0.001
         max_iters = 1e3
         sdi = np.arange(0, (len(self.indicators)+1)*self.bincnt, self.bincnt)
+        pfloor = self.positions.min()
+        pceil = self.positions.max()
+        rar = self.rar
         for epoch in range(1, self.epochs+1):
-            total_reward = 0
-            # state_data = np.concatenate((df_bins.values, pos_col), axis=1)
-            sd = np.concatenate((df_bins.values, pos_col), axis=1)
+            # total_reward = 0
+            sd = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
             sd += sdi
             count = 0
+            rewards = np.zeros((sd.shape[0],))
+            actions = np.full((sd.shape[0],), -1)
             while True:
-                if total_reward > goal_reward or count > max_iters:
-                    break
+                self.rar = rar
+                rewards[:] = 0
+                actions[:] = -1
                 s = sd[0]
                 a = self.actions[self.querysetstate(s.sum())]
+                actions[0] = a
                 for i, sp in enumerate(sd[1:]):
                     # update state position for action
-                    sp[-1] = s[-1]+a*sdi[-1]
+                    prior_pos = int(s[-1]-sdi[-1]-1)
+                    pos = np.clip(prior_pos+a, pfloor, pceil)
+                    sp[-1] = pos+sdi[-1]+1
                     # get reward for prior state
-                    r = pxchgs[i]*s[-1]
+                    if prior_pos == 0:
+                        r = cash_reward
+                    else:
+                        r = pxchgs[i]*prior_pos
                     # get next a, roll state fwd; increment r
-                    a = self.query(s.sum(), r)
+                    actions[i] = a
+                    rewards[i] = r
+                    a = self.actions[self.query(s.sum(), r)]
                     s = sp
-                    total_reward += r
-                count += 1
 
-            scores[epoch-1] = total_reward
-            if self.verbose:
-                print(f'epoch: {epoch} reward: {total_reward} count: {count}')
+                count += 1
+                if rewards.sum() > goal_reward or count > max_iters:
+                    scores[epoch-1] = rewards.sum()
+                    break
+            # if self.verbose:
+            print(f'epoch: {epoch} reward: {rewards.sum()} count: {count}')
         return np.median(scores)
 
     def testPolicy(self, symbol="JPM", sd=dt.datetime(2008, 1, 1),
@@ -148,6 +164,6 @@ class StrategyLearner(QLearner):
 
 if __name__ == "__main__":
     print("One does not simply think up a strategy")
-    slearner = StrategyLearner(verbose=True)
+    slearner = StrategyLearner(verbose=False)
     result = slearner.addEvidence()
     print(f'median score: {result}')
