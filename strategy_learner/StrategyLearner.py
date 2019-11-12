@@ -30,15 +30,17 @@ import random
 
 class StrategyLearner(QLearner):
     def __init__(self, epochs=500, impact=0.00, positions=[-1, 0, 1],
-                 bincnt=10, indicators='all', alpha=0.2, gamma=0.9,
-                 rar=0.5, radr=0.99, dyna=200, verbose=False, commission=0.0):
+                 actions=[0, -2, -1, 1, 2], bincnt=4, indicators='all',
+                 alpha=0.2, gamma=0.9, rar=0.5, radr=0.99, dyna=200,
+                 verbose=False, commission=0.0):
         self.epochs = epochs
         self.impact = impact
         self.commission = commission
         self.positions = np.array(positions)
-        pos_rng = self.positions.max()-self.positions.min()
-        self.actions = np.arange(-pos_rng, pos_rng+1)
+        # make sure okay with the first action as default for no experience
+        self.actions = np.array(actions)
         self.bincnt = bincnt
+        self.base_rar = rar
         if indicators == 'all':
             self.indicators = [indi.pct_sma, indi.rsi, indi.vwpc]
         elif isinstance(indicators, list):
@@ -46,8 +48,8 @@ class StrategyLearner(QLearner):
         else:
             raise ValueError(f'indicators param must be list or \'all\'')
 
-        # state space: bins*indicators*positions
-        num_states = len(self.indicators)*self.bincnt*self.positions.shape[0]
+        # state space: bins*indicators
+        num_states = self.bincnt**len(self.indicators)
         super().__init__(num_states=num_states,
                          num_actions=self.actions.shape[0],
                          alpha=alpha, gamma=gamma, rar=rar, radr=radr,
@@ -84,38 +86,41 @@ class StrategyLearner(QLearner):
             df_bins[c] = pd.cut(df_met[c], self.bincnt, labels=False)
 
         # train qlearner
-        pos_col = np.ones((df_bins.shape[0], 1))
+        # pos_col = np.ones((df_bins.shape[0], 1))
         scores = np.zeros((self.epochs, 1))
         pxchgs = df.loc[symbol, 'AdjClose']
-        pxchgs = (pxchgs/pxchgs.shift(1)-1).dropna().values
-        sdi = np.arange(0, (len(self.indicators)+1)*self.bincnt, self.bincnt)
+        pxchgs = (pxchgs/pxchgs.shift(1)-1).dropna()
+        pxchgs = pxchgs[pxchgs.index.isin(df_bins.index.values)].values
+        # multiplier mapping from indicators to state [1, 10, 100]
+        sdi = np.full((len(self.indicators),), self.bincnt)
+        sdi = sdi**np.arange(0, len(self.indicators))
+        sdt = df_bins.astype(int).values*sdi
+        states = sdt.sum(axis=1)
         pfloor = self.positions.min()
         pceil = self.positions.max()
         converge = 0.025
         for epoch in range(1, self.epochs+1):
-            sdt = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
-            sdt += sdi
-            s = sdt[0]
-            a = self.actions[self.querysetstate(s.sum())]
+            a = self.actions[self.querysetstate(states[0])]
             rewards = np.zeros((pxchgs.shape[0],))
-            for i, sp in enumerate(sdt[1:]):
-                # update state position for action
-                prior_pos = int(s[-1]-sdi[-1]-1)
-                pos = np.clip(prior_pos+a, pfloor, pceil)
-                sp[-1] = pos+sdi[-1]+1
-                # get reward for prior state
-                r = pxchgs[i]*prior_pos
+            pos = 0
+            prior_pos = 0
+            evidence = zip(states[:-1], states[1:], pxchgs)
+            for i, (s, sp, pchg) in enumerate(evidence):
+                next_pos = np.clip(pos+a, pfloor, pceil)
+                r = pchg*pos
                 if self.impact != 0:
-                    r -= abs((pos-prior_pos)*pxchgs[i])*self.impact
-                # get next a, roll state fwd; increment r
+                    r -= abs(prior_pos-pos)/1000*self.impact
                 rewards[i] = r
-                a = self.actions[self.query(s.sum(), r)]
-                s = sp
+                a = self.actions[self.query(sp, r)]
+                prior_pos = pos
+                pos = next_pos
 
             scores[epoch-1] = ((pxchgs-rewards)**2).mean()**0.5
-            # print(f'epoch: {epoch} score: {scores[epoch-1]}')
-            if epoch >= 20:
-                self.cmp_policy(symbol=symbol, sd=sd, ed=ed, sv=sv)
+            print(f'epoch: {epoch} score: {scores[epoch-1]}')
+            if epoch >= 25:
+                # zcnt = (self.Q == 0).sum()
+                # tot = self.num_states*self.num_actions
+                # print(f'no experience: {zcnt}/{tot} ({zcnt/tot:.2f})')
                 break
                 bench = scores[epoch-10:epoch-2].mean()
                 rmseschg = np.abs(scores[epoch-1]/bench-1)
@@ -172,19 +177,47 @@ class StrategyLearner(QLearner):
 
     def cmp_policy(self, symbol='JPM', sd=dt.datetime(2008, 1, 1),
                    ed=dt.datetime(2009, 12, 31), sv=1e5):
-        print(symbol, sd, ed, sv)
         trades = self.testPolicy(symbol=symbol, sd=sd, ed=ed)
-        print(trades)
-        lng = (trades[symbol] > 0).sum()
-        shrt = (trades[symbol] < 0).sum()
-        cash = trades.shape[0]-lng-shrt
-        tot = lng + shrt + cash
-        print(f'{symbol} trades summary:')
-        print(f'lng: {lng/tot:.2f} shrt: {shrt/tot:.2f} cash: {cash/tot:.2f}')
         sp = msim.compute_portvals(trades, start_val=sv,
                                    commission=self.commission,
                                    impact=self.impact)
-        print(f'ending value: {sp[-1]} cr: {sp[-1]/sp[0]-1}')
+
+        title = (
+            f'\npolicy results|| target: {symbol} timeframe: {sd}-->{ed} '
+            f'\nimpact: {self.impact} commissions: {self.commission} '
+        )
+        print(title)
+
+        qfull = self._qfull()
+        qfullpct = qfull/self._qtotal()
+        subtitle = (
+            f'\nepochs: {self.epochs} dyna: {self.dyna} '
+            f'\nalpha: {self.alpha} gamma: {self.gamma} '
+            f'\nrar: {self.base_rar} radr: {self.radr} '
+            f'\nbincnt: {self.bincnt} Q-full: {qfull} ({qfullpct:.2f}) '
+        )
+        print(subtitle)
+
+        buys = (trades[symbol] > 0).sum()
+        sells = (trades[symbol] < 0).sum()
+        holds = trades.shape[0]-buys-sells
+        total = buys+sells+holds
+        metrics = (
+            f'- buys: {buys}/{total} ({buys/total:.2f}) '
+            f'\n- sells: {sells}/{total} ({sells/total:.2f}) '
+            f'\n- holds: {holds}/{total} ({holds/total:.2f}) '
+            f'\n- aum: {sp[0]}-->{sp[-1]} ({sp[-1]/sp[0]-1:.2f}) '
+        )
+        print(f'\n{metrics}')
+
+    def _qempty(self):
+        return (self.Q == 0).sum()
+
+    def _qfull(self):
+        return self._qtotal()-self._qempty()
+
+    def _qtotal(self):
+        return np.prod(self.Q.shape)
 
 
 if __name__ == "__main__":
