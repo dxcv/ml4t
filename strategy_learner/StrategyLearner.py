@@ -23,16 +23,18 @@ import datetime as dt
 import pandas as pd
 import numpy as np
 import indicators as indi
+import marketsimcode as msim
 from QLearner import QLearner
-# import random
+import random
 
 
 class StrategyLearner(QLearner):
-    def __init__(self, epochs=500, impact=0.001, positions=[-1, 0, 1],
-                 bincnt=4, indicators='all', alpha=0.2, gamma=0.9,
-                 rar=0.5, radr=0.999, dyna=200, verbose=False):
+    def __init__(self, epochs=500, impact=0.00, positions=[-1, 0, 1],
+                 bincnt=10, indicators='all', alpha=0.2, gamma=0.9,
+                 rar=0.5, radr=0.99, dyna=200, verbose=False, commission=0.0):
         self.epochs = epochs
         self.impact = impact
+        self.commission = commission
         self.positions = np.array(positions)
         pos_rng = self.positions.max()-self.positions.min()
         self.actions = np.arange(-pos_rng, pos_rng+1)
@@ -59,6 +61,8 @@ class StrategyLearner(QLearner):
         """
         Trains QLearner
         """
+        # clear learner
+        self.Q = np.zeros((self.num_states, self.num_actions))
         # load data
         syms = [symbol]
         dates = pd.date_range(sd, ed)
@@ -84,37 +88,34 @@ class StrategyLearner(QLearner):
         scores = np.zeros((self.epochs, 1))
         pxchgs = df.loc[symbol, 'AdjClose']
         pxchgs = (pxchgs/pxchgs.shift(1)-1).dropna().values
-        cash_reward = 0.0
         sdi = np.arange(0, (len(self.indicators)+1)*self.bincnt, self.bincnt)
         pfloor = self.positions.min()
         pceil = self.positions.max()
-        rar = self.rar
         converge = 0.025
         for epoch in range(1, self.epochs+1):
-            self.rar = rar
-            sd = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
-            sd += sdi
-            s = sd[0]
+            sdt = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
+            sdt += sdi
+            s = sdt[0]
             a = self.actions[self.querysetstate(s.sum())]
             rewards = np.zeros((pxchgs.shape[0],))
-            for i, sp in enumerate(sd[1:]):
+            for i, sp in enumerate(sdt[1:]):
                 # update state position for action
                 prior_pos = int(s[-1]-sdi[-1]-1)
                 pos = np.clip(prior_pos+a, pfloor, pceil)
                 sp[-1] = pos+sdi[-1]+1
                 # get reward for prior state
-                if prior_pos == 0:
-                    r = cash_reward
-                else:
-                    r = pxchgs[i]*prior_pos
+                r = pxchgs[i]*prior_pos
+                if self.impact != 0:
+                    r -= abs((pos-prior_pos)*pxchgs[i])*self.impact
                 # get next a, roll state fwd; increment r
                 rewards[i] = r
                 a = self.actions[self.query(s.sum(), r)]
                 s = sp
 
             scores[epoch-1] = ((pxchgs-rewards)**2).mean()**0.5
-            print(f'epoch: {epoch} score: {scores[epoch-1]}')
-            if epoch >= 5:
+            # print(f'epoch: {epoch} score: {scores[epoch-1]}')
+            if epoch >= 20:
+                self.cmp_policy(symbol=symbol, sd=sd, ed=ed, sv=sv)
                 break
                 bench = scores[epoch-10:epoch-2].mean()
                 rmseschg = np.abs(scores[epoch-1]/bench-1)
@@ -152,31 +153,46 @@ class StrategyLearner(QLearner):
         df_trades = pd.DataFrame(index=df_pxs.loc[symbol].index)
         df_trades['Shares'] = 0
         pos_col = np.ones((df_bins.shape[0], 1))
-        sd = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
+        sdt = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
         sdi = np.arange(0, (len(self.indicators)+1)*self.bincnt, self.bincnt)
-        sd += sdi
-        actions = np.zeros((sd.shape[0],))
+        sdt += sdi
+        actions = np.zeros((sdt.shape[0],))
         p = 0
-        for i, s in enumerate(sd):
+        for i, s in enumerate(sdt):
             a = self.actions[self.Q[s.sum(), :].argmax()]
             actions[i] = np.clip(p+a, -1, 1)-p
             p += actions[i]
 
-        df_pos = pd.DataFrame(actions.cumsum(), index=df_bins.index,
-                              columns=['Shares'])
-        df_trades.update(df_pos)
+        df_actions = pd.DataFrame(actions, index=df_bins.index,
+                                  columns=['Shares'])
+        df_trades.update(df_actions)
         df_trades *= 1e3
+        df_trades = df_trades.rename(columns={'Shares': symbol})
         return df_trades
+
+    def cmp_policy(self, symbol='JPM', sd=dt.datetime(2008, 1, 1),
+                   ed=dt.datetime(2009, 12, 31), sv=1e5):
+        print(symbol, sd, ed, sv)
+        trades = self.testPolicy(symbol=symbol, sd=sd, ed=ed)
+        print(trades)
+        lng = (trades[symbol] > 0).sum()
+        shrt = (trades[symbol] < 0).sum()
+        cash = trades.shape[0]-lng-shrt
+        tot = lng + shrt + cash
+        print(f'{symbol} trades summary:')
+        print(f'lng: {lng/tot:.2f} shrt: {shrt/tot:.2f} cash: {cash/tot:.2f}')
+        sp = msim.compute_portvals(trades, start_val=sv,
+                                   commission=self.commission,
+                                   impact=self.impact)
+        print(f'ending value: {sp[-1]} cr: {sp[-1]/sp[0]-1}')
 
 
 if __name__ == "__main__":
     print("One does not simply think up a strategy")
-    slearner = StrategyLearner(verbose=False)
-    slearner.addEvidence()
-    trades = slearner.testPolicy()
-    lng = (trades.Shares > 0).sum()
-    shrt = (trades.Shares < 0).sum()
-    cash = trades.shape[0]-lng-shrt
-    tot = lng + shrt + cash
-    print(f'trades summary:')
-    print(f'longs: {lng/tot:.2f} shorts: {shrt/tot:.2f} cash: {cash/tot:.2f}')
+    random.seed(10)
+    np.random.seed(10)
+    slearner = StrategyLearner(impact=0.0, verbose=False)
+    slearner.addEvidence(symbol='AAPL', sd=dt.datetime(2008, 1, 1),
+                         ed=dt.datetime(2009, 12, 31))
+    slearner.cmp_policy(symbol='AAPL', sd=dt.datetime(2010, 1, 1),
+                        ed=dt.datetime(2011, 12, 31))
