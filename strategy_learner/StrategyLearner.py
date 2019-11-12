@@ -22,7 +22,6 @@ GT ID: 903421975
 import datetime as dt
 import pandas as pd
 import numpy as np
-import util as ut
 import indicators as indi
 from QLearner import QLearner
 # import random
@@ -31,7 +30,7 @@ from QLearner import QLearner
 class StrategyLearner(QLearner):
     def __init__(self, epochs=500, impact=0.001, positions=[-1, 0, 1],
                  bincnt=4, indicators='all', alpha=0.2, gamma=0.9,
-                 rar=0.5, radr=0.99, dyna=200, verbose=False):
+                 rar=0.5, radr=0.999, dyna=200, verbose=False):
         self.epochs = epochs
         self.impact = impact
         self.positions = np.array(positions)
@@ -90,7 +89,7 @@ class StrategyLearner(QLearner):
         pfloor = self.positions.min()
         pceil = self.positions.max()
         rar = self.rar
-        converge = 0.05
+        converge = 0.025
         for epoch in range(1, self.epochs+1):
             self.rar = rar
             sd = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
@@ -98,7 +97,6 @@ class StrategyLearner(QLearner):
             s = sd[0]
             a = self.actions[self.querysetstate(s.sum())]
             rewards = np.zeros((pxchgs.shape[0],))
-            # [TBU: shuffle indices]
             for i, sp in enumerate(sd[1:]):
                 # update state position for action
                 prior_pos = int(s[-1]-sdi[-1]-1)
@@ -116,41 +114,69 @@ class StrategyLearner(QLearner):
 
             scores[epoch-1] = ((pxchgs-rewards)**2).mean()**0.5
             print(f'epoch: {epoch} score: {scores[epoch-1]}')
-            if epoch >= 10:
-                rmseschg = np.abs(scores[epoch-1]/scores[:epoch-2].mean()-1)
+            if epoch >= 5:
+                break
+                bench = scores[epoch-10:epoch-2].mean()
+                rmseschg = np.abs(scores[epoch-1]/bench-1)
                 if rmseschg < converge:
                     break
 
         return scores
 
-    def testPolicy(self, symbol="JPM", sd=dt.datetime(2008, 1, 1),
-                   ed=dt.datetime(2009, 12, 31), sv=1e5):
+    def testPolicy(self, symbol="JPM", sd=dt.datetime(2010, 1, 1),
+                   ed=dt.datetime(2011, 12, 31), sv=1e5):
         """
         Tests existing policy against new data
         """
-        # here we build a fake set of trades
-        # your code should return the same sort of data
+        # get data
+        syms = [symbol]
         dates = pd.date_range(sd, ed)
-        prices_all = ut.get_data([symbol], dates)  # automatically adds SPY
-        trades = prices_all[[symbol, ]]  # only portfolio symbols
-        # trades_SPY = prices_all['SPY']  # only SPY, for comparison later
-        trades.values[:, :] = 0  # set them all to nothing
-        trades.values[0, :] = 1000  # add a BUY at the start
-        trades.values[40, :] = -1000  # add a SELL
-        trades.values[41, :] = 1000  # add a BUY
-        trades.values[60, :] = -2000  # go short from long
-        trades.values[61, :] = 2000  # go long from short
-        trades.values[-1, :] = -1000  # exit on the last day
-        if self.verbose:
-            print(type(trades))  # it better be a DataFrame!
-        if self.verbose:
-            print(trades)
-        if self.verbose:
-            print(prices_all)
-        return trades
+        df = indi.ml4t_load_data(syms, dates)
+        df_pxs = pd.DataFrame(df.AdjClose)
+        df_met = df_pxs.copy()
+
+        # generate indicators
+        data_inputs = [df_pxs, df_pxs, df.loc[:, ['AdjClose', 'Volume']]]
+        standards = [True, False, False]
+        ws = [[20], [5], [30]]
+        for i, d, s, w in zip(self.indicators, data_inputs, standards, ws):
+            df_met = df_met.join(i(d, window_sizes=w, standard=s), how='inner')
+
+        # discretize indicators
+        df_met = df_met.loc[symbol].drop(['AdjClose'], axis=1).dropna()
+        df_bins = df_met.copy()
+        for c in df_met.columns.values:
+            df_bins[c] = pd.cut(df_met[c], self.bincnt, labels=False)
+
+        # pass data thru policy
+        df_trades = pd.DataFrame(index=df_pxs.loc[symbol].index)
+        df_trades['Shares'] = 0
+        pos_col = np.ones((df_bins.shape[0], 1))
+        sd = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
+        sdi = np.arange(0, (len(self.indicators)+1)*self.bincnt, self.bincnt)
+        sd += sdi
+        actions = np.zeros((sd.shape[0],))
+        p = 0
+        for i, s in enumerate(sd):
+            a = self.actions[self.Q[s.sum(), :].argmax()]
+            actions[i] = np.clip(p+a, -1, 1)-p
+            p += actions[i]
+
+        df_pos = pd.DataFrame(actions.cumsum(), index=df_bins.index,
+                              columns=['Shares'])
+        df_trades.update(df_pos)
+        df_trades *= 1e3
+        return df_trades
 
 
 if __name__ == "__main__":
     print("One does not simply think up a strategy")
     slearner = StrategyLearner(verbose=False)
     slearner.addEvidence()
+    trades = slearner.testPolicy()
+    lng = (trades.Shares > 0).sum()
+    shrt = (trades.Shares < 0).sum()
+    cash = trades.shape[0]-lng-shrt
+    tot = lng + shrt + cash
+    print(f'trades summary:')
+    print(f'longs: {lng/tot:.2f} shorts: {shrt/tot:.2f} cash: {cash/tot:.2f}')
