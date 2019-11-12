@@ -86,8 +86,7 @@ class StrategyLearner(QLearner):
             df_bins[c] = pd.cut(df_met[c], self.bincnt, labels=False)
 
         # train qlearner
-        # pos_col = np.ones((df_bins.shape[0], 1))
-        scores = np.zeros((self.epochs, 1))
+        self.scores = np.zeros((self.epochs, 1))
         pxchgs = df.loc[symbol, 'AdjClose']
         pxchgs = (pxchgs/pxchgs.shift(1)-1).dropna()
         pxchgs = pxchgs[pxchgs.index.isin(df_bins.index.values)].values
@@ -98,7 +97,6 @@ class StrategyLearner(QLearner):
         states = sdt.sum(axis=1)
         pfloor = self.positions.min()
         pceil = self.positions.max()
-        converge = 0.025
         for epoch in range(1, self.epochs+1):
             a = self.actions[self.querysetstate(states[0])]
             rewards = np.zeros((pxchgs.shape[0],))
@@ -115,19 +113,10 @@ class StrategyLearner(QLearner):
                 prior_pos = pos
                 pos = next_pos
 
-            scores[epoch-1] = ((pxchgs-rewards)**2).mean()**0.5
-            print(f'epoch: {epoch} score: {scores[epoch-1]}')
-            if epoch >= 25:
-                # zcnt = (self.Q == 0).sum()
-                # tot = self.num_states*self.num_actions
-                # print(f'no experience: {zcnt}/{tot} ({zcnt/tot:.2f})')
-                break
-                bench = scores[epoch-10:epoch-2].mean()
-                rmseschg = np.abs(scores[epoch-1]/bench-1)
-                if rmseschg < converge:
-                    break
+            self.scores[epoch-1] = ((pxchgs-rewards)**2).mean()**0.5
+            print(f'epoch: {epoch} score: {self.scores[epoch-1]}')
 
-        return scores
+        return self.scores[:]
 
     def testPolicy(self, symbol="JPM", sd=dt.datetime(2010, 1, 1),
                    ed=dt.datetime(2011, 12, 31), sv=1e5):
@@ -182,33 +171,24 @@ class StrategyLearner(QLearner):
                                    commission=self.commission,
                                    impact=self.impact)
 
-        title = (
-            f'\npolicy results|| target: {symbol} timeframe: {sd}-->{ed} '
-            f'\nimpact: {self.impact} commissions: {self.commission} '
-        )
-        print(title)
-
-        qfull = self._qfull()
-        qfullpct = qfull/self._qtotal()
-        subtitle = (
-            f'\nepochs: {self.epochs} dyna: {self.dyna} '
-            f'\nalpha: {self.alpha} gamma: {self.gamma} '
-            f'\nrar: {self.base_rar} radr: {self.radr} '
-            f'\nbincnt: {self.bincnt} Q-full: {qfull} ({qfullpct:.2f}) '
-        )
-        print(subtitle)
-
         buys = (trades[symbol] > 0).sum()
         sells = (trades[symbol] < 0).sum()
         holds = trades.shape[0]-buys-sells
         total = buys+sells+holds
-        metrics = (
+        cr = sp[-1]/sp[0]-1
+
+        qfull = self._qfull()
+        qfullpct = qfull/self._qtotal()
+
+        summary = (
             f'- buys: {buys}/{total} ({buys/total:.2f}) '
             f'\n- sells: {sells}/{total} ({sells/total:.2f}) '
             f'\n- holds: {holds}/{total} ({holds/total:.2f}) '
-            f'\n- aum: {sp[0]}-->{sp[-1]} ({sp[-1]/sp[0]-1:.2f}) '
+            f'\n- aum: {sp[0]} --> {sp[-1]} ({cr:.2f}) '
+            f'\nQ metrics: '
+            f'\n- pct full: {qfull} ({qfullpct:.2f}) '
         )
-        print(f'\n{metrics}')
+        print(f'\n{summary}')
 
     def _qempty(self):
         return (self.Q == 0).sum()
