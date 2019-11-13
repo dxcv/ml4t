@@ -93,13 +93,21 @@ class QLearner(object):
             self.R[s, a] = (1-self.alpha)*self.R[s, a] + self.alpha*r
             n = self.dyna
             obs = np.argwhere(self.T > 0)
+
+            # generate random sprimes
+            sprime_totals = self.T.sum(axis=2).cumsum(axis=1)
+            sprime_totals[sprime_totals[:, -1] == 0] = 1
+            props = sprime_totals/sprime_totals[:, -1, None]
+            rand_vals = np.random.rand(self.T.shape[0], 1)
+            rand_states = (props > rand_vals).argmax(axis=1)
+
             while True:
                 if n == 0:
                     break
                 # only get prior observations
                 s_ridx, a_ridx, _ = obs[rand.randint(0, obs.shape[0]-1)]
                 r_dyn = self.R[s_ridx, a_ridx]
-                s_pdyn = self.T[s_ridx, a_ridx, :].argmax()
+                s_pdyn = rand_states[s_ridx]
 
                 a_pdyn = self.Q[s_pdyn].argmax()
                 self.Q[s_ridx, a_ridx] = (1-self.alpha)*self.Q[s_ridx, a_ridx]\
