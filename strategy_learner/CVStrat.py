@@ -47,11 +47,12 @@ class CVStrat():
         for i, d in enumerate(results):
             sym, [sd, ed] = self.symbols[i], test_periods[i]
             cr, buys, sells, = d['cr'], d['buys'], d['sells']
-            holds, tot = d['holds'], d['total']
+            holds, tot, aum = d['holds'], d['total'], d['aum']
             explored, pctexplored = d['explored'], d['pctexplored']
             msg = (
                 f'{i+1}. {sym} {sd} --> {ed} '
-                f'\n- cr: {cr:.2f} '
+                f'\n- cr: {cr:.3f} '
+                f'\n- aum: {aum:.0f} '
                 f'\n- explored: {explored} ({pctexplored:.2f}) '
                 f'\n- buys: {buys}/{tot} ({buys/tot: .2f}) '
                 f'\n- sells: {sells}/{tot} ({sells/tot:.2f}) '

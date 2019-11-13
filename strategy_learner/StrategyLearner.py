@@ -78,7 +78,6 @@ class StrategyLearner(QLearner):
         # generate indicators
         dinps = [df_pxs, df_pxs, df.loc[:, ['AdjClose', 'Volume']]]
         standards = [True, False, True]
-        # ws = [[20], [5], [30]]
         for i, d, s, w in zip(self.indicators, dinps, standards, self.ws):
             df_met = df_met.join(i(d, window_sizes=w, standard=s), how='inner')
 
@@ -89,7 +88,6 @@ class StrategyLearner(QLearner):
             df_bins[c] = pd.cut(df_met[c], self.bincnt, labels=False)
 
         # train qlearner
-        # self.scores = np.zeros((self.epochs, 1))
         pxchgs = df.loc[symbol, 'AdjClose']
         pxchgs = (pxchgs/pxchgs.shift(1)-1).dropna()
         pxchgs = pxchgs[pxchgs.index.isin(df_bins.index.values)].values
@@ -98,26 +96,10 @@ class StrategyLearner(QLearner):
         sdi = sdi**np.arange(0, self.featcnt)
         sdt = df_bins.astype(int).values*sdi
         states = sdt.sum(axis=1)
-        # pfloor = self.positions.min()
-        # pceil = self.positions.max()
         for epoch in range(1, self.epochs+1):
             self.actions[self.querysetstate(states[0])]
-            # a = self.actions[self.querysetstate(states[0])]
-            # rewards = np.zeros((pxchgs.shape[0],))
-            # pos = 0
-            # prior_pos = 0
             for sp, pchg in zip(states[1:], pxchgs[:-1]):
-                # next_pos = np.clip(pos+a, pfloor, pceil)
-                # r = pchg
                 self.query(sp, pchg)
-                # r = pchg*pos
-                # if self.impact != 0:
-                #     r -= abs(prior_pos-pos)/1000*self.impact
-                # rewards[i] = r
-                # a = self.actions[self.query(sp, r)]
-                # prior_pos = pos
-                # pos = next_pos
-            # self.scores[epoch-1] = ((pxchgs-rewards)**2).mean()**0.5
 
     def testPolicy(self, symbol="JPM", sd=dt.datetime(2010, 1, 1),
                    ed=dt.datetime(2011, 12, 31), sv=1e5):
@@ -134,7 +116,6 @@ class StrategyLearner(QLearner):
         # generate indicators
         dinps = [df_pxs, df_pxs, df.loc[:, ['AdjClose', 'Volume']]]
         standards = [True, False, False]
-        # ws = [[20], [5], [30]]
         for i, d, s, w in zip(self.indicators, dinps, standards, self.ws):
             df_met = df_met.join(i(d, window_sizes=w, standard=s), how='inner')
 
@@ -147,23 +128,24 @@ class StrategyLearner(QLearner):
         # pass data thru policy
         df_trades = pd.DataFrame(index=df_pxs.loc[symbol].index)
         df_trades['Shares'] = 0
-        pos_col = np.ones((df_bins.shape[0], 1))
-        sdt = np.concatenate((df_bins.values, pos_col), axis=1).astype(int)
-        sdi = np.arange(0, (self.featcnt+1)*self.bincnt, self.bincnt)
-        sdt += sdi
-        actions = np.zeros((sdt.shape[0],))
-        p = 0
-        for i, s in enumerate(sdt):
-            a = self.actions[self.Q[s.sum(), :].argmax()]
-            actions[i] = np.clip(p+a, -1, 1)-p
-            p += actions[i]
 
+        sdi = np.full((self.featcnt), self.bincnt)
+        sdi = sdi**np.arange(0, self.featcnt)
+        sdt = df_bins.astype(int).values*sdi
+        states = sdt.sum(axis=1)
+        actions = np.zeros((sdt.shape[0],))
+        # p = 0
+        for i, s in enumerate(states):
+            actions[i] = self.actions[self.Q[s, :].argmax()]
+            # a = self.actions[self.Q[s, :].argmax()]
+            # actions[i] = np.clip(p+a, -1, 1)-p
+            # p += actions[i]
         df_actions = pd.DataFrame(actions, index=df_bins.index,
                                   columns=['Shares'])
+        df_actions = df_actions.diff().clip(-1, 1)
         df_trades.update(df_actions)
         df_trades *= 1e3
-        df_trades = df_trades.rename(columns={'Shares': symbol})
-        return df_trades
+        return df_trades.rename(columns={'Shares': symbol})
 
     def cmp_policy(self, symbol='JPM', sd=dt.datetime(2008, 1, 1),
                    ed=dt.datetime(2009, 12, 31), sv=1e5):
@@ -177,12 +159,13 @@ class StrategyLearner(QLearner):
         holds = trades.shape[0]-buys-sells
         total = buys+sells+holds
         cr = sp[-1]/sp[0]-1
+        aum = sp[-1]
 
         qfull = self._qfull()
         qfullpct = qfull/self._qtotal()
 
         return dict(buys=buys, sells=sells, holds=holds, total=total,
-                    cr=cr, explored=qfull, pctexplored=qfullpct)
+                    cr=cr, explored=qfull, pctexplored=qfullpct, aum=aum)
 
     def _qempty(self):
         return (self.Q == 0).sum()
